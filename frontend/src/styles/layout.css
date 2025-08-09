@@ -1,0 +1,119 @@
+/**
+ * 布局样式模块
+ * 包含主要的网格布局和响应式设计
+ */
+
+
+/* App 外层容器：负责背景 */
+
+.app {
+    min-height: 100vh;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+
+/* 主容器：负责整体布局和居中 */
+
+.container {
+    max-width: 2200px;
+    margin: 0 auto;
+    padding: clamp(1rem, 1.5vw, 2rem);
+    color: #2d3436;
+    min-height: 100vh;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+
+/* 核心布局：使用 CSS Grid 构建主画板 */
+
+.weather-app {
+    display: grid;
+    /* 移动端默认为单列 */
+    grid-template-columns: 1fr;
+    /* gap 是行与行或列与列之间的间距 */
+    gap: clamp(1.5rem, 3vw, 2rem);
+}
+
+
+/* 侧边栏样式 */
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2rem, 4vw, 3rem);
+    /* 增大间距避免重叠 */
+    height: fit-content;
+    align-items: center;
+    /* 居中对齐 */
+    width: 100%;
+}
+
+
+/* 主内容区 */
+
+.main-content {
+    background: none;
+    backdrop-filter: none;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+    border: none;
+    overflow: visible;
+    /* 关键：允许子元素溢出，这样滚动条才能正常工作 */
+}
+
+
+/* 标题区域 */
+
+.header {
+    text-align: center;
+    margin: 0 auto clamp(1.5rem, 4vw, 3rem) auto;
+    /* 确保标题居中 */
+    width: 100%;
+    max-width: 100%;
+}
+
+.title {
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 700;
+    color: white;
+    margin: 0 0 0.5rem 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.title .icon {
+    margin-right: 0.5rem;
+}
+
+.subtitle {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: clamp(1rem, 2.5vw, 1.2rem);
+    margin: 0;
+}
+
+
+/* 桌面端布局：Grid 的威力 */
+
+@media (min-width: 768px) {
+    .weather-app {
+        /* 桌面端：两列布局 - 侧边栏400px，主内容充分利用剩余空间 */
+        grid-template-columns: 400px 1fr;
+        grid-template-rows: 1fr;
+        gap: clamp(1.5rem, 2vw, 2.5rem);
+        max-width: 2000px;
+        /* 进一步增加最大宽度让右侧更宽 */
+        margin: 0 auto;
+        /* 居中整个布局 */
+        width: 98%;
+        /* 接近全宽，充分利用空间 */
+    }
+    /* 桌面端预报区域垂直排列，不并排 */
+    .forecast-container {
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+        /* 增大间距 */
+    }
+}

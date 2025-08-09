@@ -1,0 +1,55 @@
+/**
+ * 全局样式重置与基础设定
+ */
+
+
+/* --- 全局重置与设定 --- */
+
+* {
+    box-sizing: border-box;
+}
+
+
+/* 只重置真正需要重置的元素 */
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+}
+
+
+/* 布局容器重置 */
+
+#app,
+.container,
+.weather-app {
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    height: 100%;
+    font-size: clamp(14px, 2vw, 16px);
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+body {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: linear-gradient(135deg, #74b9ff 0%, #0984e3 50%, #6c5ce7 100%);
+    background-attachment: fixed;
+    background-size: cover;
+    background-repeat: no-repeat;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+#app {
+    min-height: 100vh;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: inherit;
+}

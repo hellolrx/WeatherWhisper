@@ -28,31 +28,129 @@
 - **IDE**: cursor
 
 ## 项目结构
+
+### 🏗️ 模块化架构设计
+
+项目采用组件化、模块化的架构设计，提高代码的可维护性和复用性：
+
 ```
 WeatherWhisper/
 ├── backend/                 # FastAPI 后端
 │   ├── app/
-│   │   ├── routers/        # API 路由
-│   │   │   ├── geo.py     # 城市查询
-│   │   │   └── weather.py # 天气接口
+│   │   ├── routers/        # API 路由层
+│   │   │   ├── geo.py     # 城市查询接口
+│   │   │   └── weather.py # 天气数据接口
 │   │   ├── services/
-│   │   │   └── qweather.py # 和风天气对接与缓存
+│   │   │   └── qweather.py # 第三方API服务层
 │   │   └── main.py        # 应用入口
-│   ├── .env               # API密钥配置（本地）
+│   ├── .env               # 环境变量配置
 │   └── requirements.txt   # Python 依赖
-└── frontend/              # Vue3 前端
+└── frontend/              # Vue3 前端（模块化重构）
     ├── src/
-    │   ├── views/
-    │   │   └── Dashboard.vue # 主页面
-    │   ├── stores/
-    │   │   └── favorites.ts  # 收藏管理
-    │   ├── utils/
-    │   │   └── http.ts      # Axios 封装
+    │   ├── components/     # 🧩 组件库
+    │   │   ├── search/     # 搜索相关组件
+    │   │   │   └── SearchBox.vue
+    │   │   ├── favorites/  # 收藏功能组件
+    │   │   │   └── FavoriteCities.vue
+    │   │   └── weather/    # 天气显示组件
+    │   │       ├── CurrentWeather.vue
+    │   │       ├── HourlyForecast.vue
+    │   │       └── DailyForecast.vue
+    │   ├── composables/    # 🎣 组合式API
+    │   │   ├── useWeatherApi.ts    # 天气API服务
+    │   │   └── useGeolocation.ts   # 地理位置服务
+    │   ├── stores/         # 📦 状态管理
+    │   │   └── favorites.ts # 收藏城市Store
+    │   ├── styles/         # 🎨 样式模块
+    │   │   ├── global.css  # 全局样式重置
+    │   │   ├── layout.css  # 布局样式
+    │   │   └── cards.css   # 卡片组件样式
+    │   ├── types/          # 📝 类型定义
+    │   │   └── weather.ts  # 天气相关类型
+    │   ├── utils/          # 🔧 工具函数
+    │   │   ├── common.ts   # 通用工具函数
+    │   │   ├── http.ts     # HTTP请求封装
+    │   │   └── weather/    # 天气相关工具
+    │   │       └── icons.ts # 天气图标映射
+    │   ├── constants/      # 📋 常量管理
+    │   │   └── index.ts    # 应用配置常量
+    │   ├── views/          # 📄 页面组件
+    │   │   └── Dashboard.vue # 主页面（新架构）
+    │   └── main.ts         # 应用入口
     │   ├── router/
     │   └── App.vue
     ├── vite.config.ts     # Vite 配置（含代理）
     └── package.json       # Node 依赖
 
+### 🎯 架构设计原则
+
+#### 1. **组件化设计**
+- **单一职责**: 每个组件只负责一个特定功能
+- **可复用性**: 组件设计考虑在不同场景下的复用
+- **松耦合**: 组件间通过props和events通信，避免直接依赖
+
+#### 2. **样式模块化**
+- **全局样式**: `styles/global.css` - 重置样式和基础设定
+- **布局样式**: `styles/layout.css` - 网格布局和响应式设计
+- **组件样式**: 每个组件使用scoped样式，避免样式污染
+- **样式复用**: 通用卡片、按钮等基础样式提取为CSS模块
+
+#### 3. **业务逻辑分层**
+- **Composables**: 使用Vue3组合式API封装可复用的业务逻辑
+- **API服务层**: `composables/useWeatherApi.ts` 统一管理API调用
+- **工具函数**: `utils/` 目录存放纯函数工具
+- **类型安全**: TypeScript类型定义确保数据结构一致性
+
+#### 4. **状态管理**
+- **Store模式**: 使用Pinia管理全局状态（如收藏城市）
+- **局部状态**: 组件内部状态使用ref/reactive
+- **数据持久化**: localStorage集成在Store中，统一管理
+
+#### 5. **可维护性原则**
+- **文件职责明确**: 每个文件只负责特定功能
+- **命名规范**: 组件、函数、变量使用语义化命名
+- **配置集中**: 常量和配置统一管理在`constants/`
+- **文档完整**: 关键函数和组件包含TypeScript类型注释
+
+```
+
+### 🚀 使用新架构的好处
+
+1. **开发效率提升**: 组件化开发，功能模块独立，并行开发更容易
+2. **维护成本降低**: 单个组件修改不影响其他部分，降低回归风险
+3. **代码复用性**: 组件可在不同页面复用，减少重复代码
+4. **团队协作**: 清晰的文件结构和职责分工，便于多人协作
+5. **测试友好**: 每个组件和函数都可以独立测试
+6. **扩展性强**: 新增功能只需添加新组件，不需修改现有代码
+
+### 💡 **架构迁移说明**
+
+**重要提示：项目已完成架构重构！** 
+
+- ✅ **旧版本**: 单一 `Dashboard.vue` 文件（已删除）
+- 🚀 **新版本**: 模块化组件架构（当前使用）
+
+如果您是协作者，请注意：
+1. 项目现在使用模块化架构，代码更清晰易维护
+2. 所有功能已拆分为独立组件，在 `src/components/` 目录
+3. 业务逻辑提取为 `composables`，样式模块化管理
+4. 如有疑问，请参考上面的架构设计原则
+
+### 🔧 **开发工作流**
+
+新增功能时请遵循以下模式：
+```bash
+# 1. 新增组件
+src/components/功能模块/ComponentName.vue
+
+# 2. 新增业务逻辑
+src/composables/useFeatureName.ts
+
+# 3. 新增类型定义
+src/types/featureName.ts
+
+# 4. 新增样式模块（可选）
+src/styles/featureName.css
 ```
 
 ## 快速开始
@@ -279,6 +377,115 @@ body {
    - 测试多种屏幕尺寸
    - 验证 `clamp()` 函数的最小/最大值
    - 确保触摸设备的交互友好性
+
+## Git 提交与推送流程
+
+### 正确的提交步骤
+
+#### 1. 检查文件状态
+```bash
+git status
+```
+查看当前工作目录的修改状态，了解哪些文件已修改、新增或删除。
+
+#### 2. 理解 .gitignore 规则
+在提交前，务必了解 `.gitignore` 文件排除的内容：
+
+**项目根目录 .gitignore 排除：**
+- `backend/.venv/` - Python 虚拟环境
+- `__pycache__/`, `*.pyc` - Python 编译文件
+- `frontend/node_modules/` - Node.js 依赖包
+- `backend/.env`, `.env` - 环境变量文件（包含敏感信息）
+- `frontend/dist/` - 构建输出目录
+- `.idea/`, `.vscode/` - IDE 配置文件
+- 各种日志文件和系统文件
+
+**frontend/.gitignore 补充排除：**
+- `logs`, `*.log` - 日志文件
+- `node_modules`, `dist` - 依赖和构建文件
+- 编辑器临时文件
+
+#### 3. 选择性添加文件
+**❌ 错误做法：**
+```bash
+git add .  # 会添加所有文件，包括不应该提交的
+```
+
+**✅ 正确做法：**
+```bash
+# 添加源代码和配置文件
+git add README.md
+git add frontend/src/stores/favorites.ts
+git add frontend/src/views/Dashboard.vue
+git add frontend/.gitignore
+git add frontend/README.md
+git add frontend/package-lock.json  # 锁定依赖版本
+git add frontend/src/assets/
+git add frontend/src/components/
+git add frontend/src/style.css
+git add frontend/src/vite-env.d.ts
+git add frontend/public/
+```
+
+#### 4. 确认暂存区内容
+```bash
+git status
+```
+检查 "Changes to be committed" 部分，确保只包含应该提交的文件。
+
+#### 5. 创建提交
+```bash
+git commit -m "feat: 更新天气应用功能和前端组件"
+```
+使用简洁明确的提交信息，遵循约定式提交格式。
+
+#### 6. 推送到远程仓库
+```bash
+# 检查远程仓库配置
+git remote -v
+
+# 推送到 GitHub
+git push origin main
+```
+
+#### 7. 验证推送结果
+```bash
+git status
+# 应显示：Your branch is up to date with 'origin/main'
+```
+
+### 提交信息规范
+
+采用约定式提交格式：
+- `feat:` - 新功能
+- `fix:` - 修复bug
+- `docs:` - 文档更新
+- `style:` - 代码格式调整
+- `refactor:` - 重构代码
+- `test:` - 测试相关
+- `chore:` - 构建或辅助工具变动
+
+### 常见错误避免
+
+1. **不要提交敏感信息**
+   - 环境变量文件（`.env`）
+   - API 密钥和配置
+
+2. **不要提交生成文件**
+   - `node_modules/` - 依赖包目录
+   - `dist/` - 构建输出
+   - `__pycache__/` - Python 缓存
+
+3. **不要提交IDE配置**
+   - `.idea/`, `.vscode/` - 编辑器配置
+   - 临时文件和缓存
+
+### 最佳实践
+
+1. **定期提交**：完成一个功能模块就提交一次
+2. **原子提交**：每次提交只包含相关的更改
+3. **清晰描述**：提交信息要能清楚说明本次更改的内容
+4. **先拉后推**：多人协作时先 `git pull` 再 `git push`
 
 ## 许可说明
 - 本项目仅用于学习交流
