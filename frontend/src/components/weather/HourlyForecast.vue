@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onBeforeUnmount, defineProps } from 'vue'
+import { ref, computed, nextTick, onMounted, defineProps } from 'vue'
 import type { HourlyWeather } from '../../types/weather'
 import { getWeatherIcon } from '../../utils/weather/icons'
 

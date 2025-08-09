@@ -261,7 +261,38 @@ ngrok http http://localhost:5173
 
 ### 常见问题解决方案
 
-#### 1. 背景无法全屏问题
+#### 1. TypeScript 找不到已删除文件错误
+**问题症状**：
+```
+找不到文件"d:/WeatherWhisper/frontend/src/components/HelloWorld.vue"。
+程序包含该文件是因为:
+  通过在 "d:/WeatherWhisper/frontend/tsconfig.app.json" 中的包含模式 "src/**/*.vue" 匹配
+```
+
+**问题原因**：TypeScript 编译器缓存中保留了对已删除文件的引用
+
+**解决方案**：
+```bash
+# 方法1：清理 TypeScript 构建缓存
+cd frontend
+Remove-Item -Path "node_modules/.tmp" -Recurse -Force -ErrorAction SilentlyContinue
+
+# 方法2：如果问题仍存在，重启 TypeScript 语言服务
+# 在 VS Code/Cursor 中：
+# 1. 按 Ctrl+Shift+P 打开命令面板
+# 2. 输入 "TypeScript: Restart TS Server"
+# 3. 选择并执行
+
+# 方法3：重新构建项目
+npm run build
+```
+
+**预防措施**：
+- 删除组件文件后及时重启编辑器的 TypeScript 服务
+- 定期清理构建缓存，特别是重构后
+- 使用 `npm run build` 验证没有 TypeScript 错误
+
+#### 2. 背景无法全屏问题
 **问题**：页面背景出现白边，无法覆盖整个屏幕
 ```css
 /* ❌ 问题代码 */
