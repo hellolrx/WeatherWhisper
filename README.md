@@ -132,6 +132,153 @@ ngrok http http://localhost:5173
    - 搜索防抖（已实现）
    - 错误友好提示
    - 响应式设计
+   - 模块化CSS架构
+
+## 前端设计规则
+
+### CSS架构原则
+1. **模块化设计**
+   - 每个组件拥有独立的CSS样式
+   - 避免使用 `!important` 强制覆盖
+   - 明确的命名规范：`/* 组件名称样式 - 独立模块 */`
+
+2. **样式隔离**
+   ```css
+   /* ✅ 推荐：组件独立样式 */
+   .search-input {
+     margin: 0;
+     padding: clamp(1rem, 2.5vw, 1.5rem) clamp(1.5rem, 3vw, 2rem);
+   }
+   
+   /* ❌ 避免：全局强制重置 */
+   * {
+     padding: 0 !important;
+   }
+   ```
+
+3. **响应式设计**
+   - 使用 `clamp()` 函数实现流体排版
+   - 移动优先的响应式断点
+   - Grid + Flexbox 混合布局
+
+### 常见问题解决方案
+
+#### 1. 背景无法全屏问题
+**问题**：页面背景出现白边，无法覆盖整个屏幕
+```css
+/* ❌ 问题代码 */
+.app {
+  padding: 2rem; /* 导致背景缩小 */
+  background-size: 100% 100%; /* 固定尺寸，滚动时丢失 */
+}
+```
+
+**解决方案**：
+```css
+/* ✅ 解决方案 */
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: linear-gradient(135deg, #74b9ff 0%, #0984e3 50%, #6c5ce7 100%);
+  background-attachment: fixed; /* 关键：固定背景 */
+  background-size: cover; /* 覆盖整个视口 */
+  min-height: 100vh;
+}
+
+.container {
+  margin: 0 auto;
+  padding: clamp(0.5rem, 1vw, 1.5rem); /* 容器内边距 */
+}
+```
+
+#### 2. 内容溢出和布局混乱
+**问题**：卡片内容溢出容器，横向滚动失效
+```css
+/* ❌ 问题代码 */
+.hour-cards {
+  display: flex;
+  flex-wrap: wrap; /* 导致换行而非滚动 */
+}
+```
+
+**解决方案**：
+```css
+/* ✅ 解决方案 */
+.hourly-forecast-module {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr); /* 桌面端：6列网格 */
+  gap: clamp(1rem, 2vw, 1.5rem);
+  justify-items: center;
+}
+
+@media (max-width: 767px) {
+  .hourly-forecast-module {
+    grid-template-columns: repeat(4, 1fr); /* 移动端：4列网格 */
+  }
+}
+```
+
+#### 3. 文字贴边问题
+**问题**：组件内文字紧贴边框，视觉效果差
+```css
+/* ❌ 问题代码 */
+.card {
+  padding: 0; /* 无内边距 */
+}
+```
+
+**解决方案**：
+```css
+/* ✅ 解决方案：分组件独立设置 */
+.search-input {
+  padding: clamp(1rem, 2.5vw, 1.5rem) clamp(1.5rem, 3vw, 2rem);
+}
+
+.favorite-card {
+  padding: 1rem 1.25rem;
+}
+
+.hour-card {
+  padding: 1.25rem 1rem;
+}
+```
+
+#### 4. 下拉框遮挡问题
+**问题**：搜索下拉框与收藏列表重叠
+**解决方案**：
+```css
+/* 下拉框使用绝对定位 */
+.options-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 2000;
+}
+
+/* 收藏框动态推移 */
+.favorites-section.pushed-down {
+  margin-top: 280px;
+  transition: margin-top 0.3s ease;
+}
+```
+
+### 开发最佳实践
+1. **CSS优先级管理**
+   - 避免深层嵌套选择器
+   - 使用类选择器而非标签选择器
+   - 只在必要时使用 `!important`
+
+2. **布局调试技巧**
+   - 使用浏览器开发者工具实时调试
+   - 通过 `outline: 1px solid red` 快速定位问题
+   - 检查 `box-sizing: border-box` 设置
+
+3. **响应式测试**
+   - 测试多种屏幕尺寸
+   - 验证 `clamp()` 函数的最小/最大值
+   - 确保触摸设备的交互友好性
 
 ## 许可说明
 - 本项目仅用于学习交流

@@ -3,6 +3,8 @@ import { defineStore } from 'pinia'
 export type FavoriteCity = {
   id: string
   name: string
+  adm1?: string // 省份
+  adm2?: string // 市级行政区
 }
 
 const STORAGE_KEY = 'ww_favorites'
@@ -23,7 +25,7 @@ function saveToStorage(list: FavoriteCity[]) {
 export const useFavoritesStore = defineStore('favorites', {
   state: () => ({
     list: loadFromStorage() as FavoriteCity[],
-    limit: 3,
+    limit: 10,
   }),
   actions: {
     add(city: FavoriteCity) {
@@ -34,6 +36,10 @@ export const useFavoritesStore = defineStore('favorites', {
     },
     remove(id: string) {
       this.list = this.list.filter(c => c.id !== id)
+      saveToStorage(this.list)
+    },
+    clear() {
+      this.list = []
       saveToStorage(this.list)
     },
   },
