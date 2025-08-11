@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from contextlib import asynccontextmanager
 
 
 def _get_allowed_origins() -> list[str]:
@@ -8,7 +9,28 @@ def _get_allowed_origins() -> list[str]:
     return [o.strip() for o in allow_origins.split(",") if o.strip()]
 
 
-app = FastAPI(title="WeatherWhisper API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时初始化数据库
+    from app.database.connection import init_db
+    try:
+        await init_db()
+        print("✅ 数据库初始化成功")
+    except Exception as e:
+        print(f"❌ 数据库初始化失败: {e}")
+    
+    yield
+    
+    # 关闭时清理数据库连接
+    from app.database.connection import close_db
+    await close_db()
+
+
+app = FastAPI(
+    title="WeatherWhisper API", 
+    version="0.1.0",
+    lifespan=lifespan
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,11 +43,15 @@ app.add_middleware(
 
 from app.routers.geo import router as geo_router  # noqa: E402
 from app.routers.weather import router as weather_router  # noqa: E402
+from app.routers.auth import router as auth_router  # noqa: E402
+from app.routers.favorites import router as favorites_router  # noqa: E402
 from app.services import qweather  # noqa: E402
 
 
 app.include_router(geo_router, prefix="/api")
 app.include_router(weather_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
+app.include_router(favorites_router, prefix="/api")
 
 
 @app.get("/api/health")

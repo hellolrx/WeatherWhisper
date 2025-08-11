@@ -5,8 +5,8 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   server: {
-    host: '0.0.0.0',
-    port: 5173,
+    host: '127.0.0.1',  // 改为IPv4地址
+    port: 3000,          // 改为3000端口
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',

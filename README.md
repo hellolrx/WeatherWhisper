@@ -436,27 +436,6 @@ git status
 - `node_modules`, `dist` - 依赖和构建文件
 - 编辑器临时文件
 
-#### 3. 选择性添加文件
-**❌ 错误做法：**
-```bash
-git add .  # 会添加所有文件，包括不应该提交的
-```
-
-**✅ 正确做法：**
-```bash
-# 添加源代码和配置文件
-git add README.md
-git add frontend/src/stores/favorites.ts
-git add frontend/src/views/Dashboard.vue
-git add frontend/.gitignore
-git add frontend/README.md
-git add frontend/package-lock.json  # 锁定依赖版本
-git add frontend/src/assets/
-git add frontend/src/components/
-git add frontend/src/style.css
-git add frontend/src/vite-env.d.ts
-git add frontend/public/
-```
 
 #### 4. 确认暂存区内容
 ```bash
@@ -522,3 +501,249 @@ git status
 - 本项目仅用于学习交流
 - 请遵守和风天气开发者协议
 - 图标版权归和风天气所有
+
+---
+
+## 🚨 问题解决记录2025.8.11
+
+本文档记录了项目启动过程中遇到的主要问题和解决方案，供后续开发者参考。
+
+### 问题1：pip依赖冲突
+
+**问题描述：**
+```
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+mcp 1.9.1 requires anyio>=4.5, but you have anyio 3.7.1 which is incompatible.
+mcp 1.9.1 requires pydantic<3.0.0,>=2.7.2, but you have pydantic 2.5.0 which is incompatible.
+```
+
+**问题原因：**
+- 系统Python环境中有多个包版本冲突
+- 虚拟环境创建时继承了系统包的版本
+
+**解决方案：**
+```bash
+# 升级冲突的包到兼容版本
+pip install "anyio>=4.5"
+pip install "pydantic>=2.7.2"
+pip install "starlette>=0.41.3"
+pip install "h11>=0.16.0"
+```
+
+**预防措施：**
+- 使用虚拟环境隔离项目依赖
+- 定期更新requirements.txt文件
+- 避免在系统Python中安装过多包
+
+### 问题2：Python路径配置错误
+
+**问题描述：**
+```
+No Python at '"D:\python312\python.exe'
+```
+
+**问题原因：**
+- 虚拟环境配置指向了不存在的Python路径
+- 系统中有多个Python版本，虚拟环境指向错误版本
+
+**解决方案：**
+```bash
+# 删除损坏的虚拟环境
+deactivate
+Remove-Item -Path "backend\.venv" -Recurse -Force
+
+# 重新创建虚拟环境
+py -m venv backend\.venv
+backend\.venv\Scripts\activate
+
+# 重新安装依赖
+pip install -r backend/requirements.txt
+```
+
+### 问题3：requirements.txt编码问题
+
+**问题描述：**
+```
+UnicodeDecodeError: 'gbk' codec can't decode byte 0xae in position 27: illegal multibyte sequence
+```
+
+**问题原因：**
+- Windows系统默认使用GBK编码读取文件
+- requirements.txt文件包含中文字符
+- pip无法正确解析文件内容
+
+**解决方案：**
+- 将requirements.txt中的中文注释改为英文
+- 使用UTF-8编码保存文件
+- 避免在配置文件中使用特殊字符
+
+**修复后的requirements.txt：**
+```txt
+# Core framework - compatible versions
+fastapi>=0.104.0,<0.112.0
+uvicorn[standard]>=0.24.0,<0.31.0
+httpx>=0.25.0,<0.28.0
+# ... 其他依赖
+```
+
+### 问题4：JWT模块导入错误
+
+**问题描述：**
+```
+ModuleNotFoundError: No module named 'jwt'
+```
+
+**问题原因：**
+- 代码中使用了 `import jwt`
+- 但应该使用 `python-jose` 包提供的JWT功能
+
+**解决方案：**
+```python
+# 修复前
+import jwt
+
+# 修复后
+from jose import jwt, JWTError
+
+# 同时修复异常处理
+# 修复前
+except jwt.PyJWTError:
+# 修复后
+except JWTError:
+```
+
+**需要修复的文件：**
+- `backend/app/routers/auth.py`
+- `backend/app/services/user_service.py`
+
+### 问题5：pydantic-settings模块缺失
+
+**问题描述：**
+```
+ModuleNotFoundError: No module named 'pydantic_settings'
+```
+
+**问题原因：**
+- 缺少 `pydantic-settings` 包
+- 或者版本不兼容
+
+**解决方案：**
+```bash
+# 安装pydantic-settings
+pip install pydantic-settings
+
+# 或者使用兼容的导入方式
+from pydantic import BaseSettings  # 对于pydantic v2
+```
+
+### 问题6：数据库连接配置问题
+
+**问题描述：**
+```
+ERROR:app.database.connection:Database initialization error: (asyncmy.errors.OperationalError) (1045, "Access denied for user 'root'@'localhost' (using password: YES)")
+```
+
+**问题原因：**
+- MySQL用户密码配置错误
+- 认证插件不兼容（caching_sha2_password vs mysql_native_password）
+
+**解决方案：**
+```sql
+-- 创建新用户，使用兼容的认证方式
+CREATE USER 'weatheruser'@'localhost' IDENTIFIED BY 'weatherpass123';
+GRANT ALL PRIVILEGES ON weatherwhisper.* TO 'weatheruser'@'localhost';
+GRANT ALL PRIVILEGES ON weatherwhisper.* TO 'weatheruser'@'127.0.0.1';
+FLUSH PRIVILEGES;
+```
+
+**更新.env文件：**
+```bash
+DATABASE_URL=mysql+asyncmy://weatheruser:weatherpass123@localhost:3306/weatherwhisper
+```
+
+### 问题7：缺失的数据库模型文件
+
+**问题描述：**
+```
+ModuleNotFoundError: No module named 'app.schemas.user'
+```
+
+**问题原因：**
+- 项目架构需要特定的数据模型文件
+- 这些文件在项目迁移过程中丢失
+
+**解决方案：**
+创建缺失的模块文件：
+- `backend/app/schemas/user.py` - 用户数据模型
+- `backend/app/schemas/city.py` - 城市数据模型  
+- `backend/app/schemas/weather.py` - 天气数据模型
+
+### 问题8：环境变量配置优先级
+
+**问题描述：**
+- 修改了 `config.py` 中的默认值
+- 但 `.env` 文件中的配置仍然覆盖了默认值
+
+**问题原因：**
+- `.env` 文件的配置优先级高于代码中的默认值
+- 需要同时更新两个地方的配置
+
+**解决方案：**
+1. 更新 `.env` 文件中的配置
+2. 确保 `config.py` 中的默认值也是正确的
+3. 使用环境变量覆盖默认值
+
+## 🎯 成功启动检查清单
+
+### 后端启动检查
+- [x] 虚拟环境激活
+- [x] 依赖包安装完成
+- [x] 数据库连接成功
+- [x] 数据库表创建成功
+- [x] FastAPI服务启动成功
+- [x] 端口8000监听正常
+
+### 前端启动检查
+- [x] Node.js环境正常
+- [x] 依赖包安装完成
+- [x] 开发服务器启动成功
+- [x] 端口5173监听正常
+- [x] 代理配置正确
+
+### 数据库配置检查
+- [x] MySQL服务运行正常
+- [x] 数据库用户权限正确
+- [x] 数据库表结构完整
+- [x] 连接字符串格式正确
+
+## 💡 经验总结
+
+1. **环境隔离很重要**：使用虚拟环境避免系统包冲突
+2. **配置文件要同步**：代码默认值和环境变量要保持一致
+3. **依赖版本要兼容**：注意包之间的版本兼容性
+4. **错误信息要仔细看**：很多问题都有明确的错误提示
+5. **分步骤解决问题**：一次解决一个问题，避免同时修改多个地方
+
+## 🔧 常用命令速查
+
+```bash
+# 虚拟环境管理
+backend\.venv\Scripts\activate          # 激活虚拟环境
+deactivate                              # 退出虚拟环境
+
+# 依赖管理
+pip install -r backend/requirements.txt # 安装依赖
+pip list | findstr package_name         # 查看包版本
+
+# 服务启动
+python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload  # 启动后端
+cd frontend
+npm run dev                                    # 启动前端
+
+# 数据库管理
+python backend/init_database.py         # 初始化数据库
+mysql -u weatheruser -p                 # 连接数据库
+
+# 缓存清理
+Remove-Item -Path "__pycache__" -Recurse -Force  # 清理Python缓存
+```
