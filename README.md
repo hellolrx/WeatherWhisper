@@ -508,6 +508,30 @@ git status
 
 本文档记录了项目启动过程中遇到的主要问题和解决方案，供后续开发者参考。
 
+## 🎉 登录功能开发完成记录 2025.8.12
+
+### 功能概述
+✅ **用户注册**: 邮箱+用户名+密码（8位以上）
+✅ **用户登录**: 邮箱+密码+记住我功能  
+✅ **访客模式**: 无需注册，直接进入天气主页
+✅ **JWT认证**: 访问令牌7天，刷新令牌30天
+✅ **安全特性**: 密码哈希存储，邮箱验证
+
+### 技术实现
+- **后端**: FastAPI + SQLAlchemy + JWT + bcrypt
+- **前端**: Vue3 + TypeScript + Pinia + Vue Router
+- **数据库**: MySQL + 外键约束 + 级联删除
+- **认证**: JWT令牌 + 本地存储 + 路由守卫
+
+### 数据库架构
+- `users`: 用户基本信息、密码哈希、验证状态
+- `user_favorites`: 用户收藏城市（外键关联）
+- `weather_cache`: 天气数据缓存（外键关联）
+- `email_verifications`: 邮箱验证码管理
+- `password_reset_tokens`: 密码重置令牌
+- `login_attempts`: 登录尝试记录
+- `cities`: 城市信息管理
+
 ### 问题1：pip依赖冲突
 
 **问题描述：**
@@ -702,19 +726,32 @@ ModuleNotFoundError: No module named 'app.schemas.user'
 - [x] 数据库表创建成功
 - [x] FastAPI服务启动成功
 - [x] 端口8000监听正常
+- [x] 认证API接口正常
+- [x] JWT令牌生成验证正常
 
 ### 前端启动检查
 - [x] Node.js环境正常
 - [x] 依赖包安装完成
 - [x] 开发服务器启动成功
-- [x] 端口5173监听正常
+- [x] 端口3000监听正常
 - [x] 代理配置正确
+- [x] 登录注册页面正常
+- [x] 路由守卫正常工作
 
 ### 数据库配置检查
 - [x] MySQL服务运行正常
 - [x] 数据库用户权限正确
 - [x] 数据库表结构完整
 - [x] 连接字符串格式正确
+- [x] 外键约束配置正确
+- [x] 级联删除规则正常
+
+### 认证功能检查
+- [x] 用户注册流程正常
+- [x] 用户登录流程正常
+- [x] JWT令牌生成正常
+- [x] 访客模式访问正常
+- [x] 路由权限控制正常
 
 ## 💡 经验总结
 
@@ -723,6 +760,11 @@ ModuleNotFoundError: No module named 'app.schemas.user'
 3. **依赖版本要兼容**：注意包之间的版本兼容性
 4. **错误信息要仔细看**：很多问题都有明确的错误提示
 5. **分步骤解决问题**：一次解决一个问题，避免同时修改多个地方
+6. **数据库外键设计**：合理设计外键约束，使用级联删除避免数据不一致
+7. **ORM模型同步**：确保SQLAlchemy模型与数据库表结构完全匹配
+8. **认证流程设计**：JWT令牌过期时间要合理，前端存储要安全
+9. **错误处理机制**：友好的错误提示和异常处理提升用户体验
+10. **代码架构清晰**：前后端分离，模块化设计便于维护和扩展
 
 ## 🔧 常用命令速查
 
@@ -738,11 +780,16 @@ pip list | findstr package_name         # 查看包版本
 # 服务启动
 python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload  # 启动后端
 cd frontend
-npm run dev                                    # 启动前端
+npm run dev -- --port 3000              # 启动前端（端口3000）
 
 # 数据库管理
-python backend/init_database.py         # 初始化数据库
+python backend/init_auth_tables.py      # 初始化认证表
+python backend/check_database.py        # 检查数据库结构
 mysql -u weatheruser -p                 # 连接数据库
+
+# 认证测试
+# 前端访问: http://localhost:3000/login
+# 后端API: http://127.0.0.1:8000/docs
 
 # 缓存清理
 Remove-Item -Path "__pycache__" -Recurse -Force  # 清理Python缓存

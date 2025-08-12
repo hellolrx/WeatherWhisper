@@ -1,49 +1,63 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, validator
 from typing import Optional
 from datetime import datetime
 
-class UserRegisterRequest(BaseModel):
+class UserBase(BaseModel):
+    """用户基础信息"""
+    email: EmailStr
+    username: str = Field(..., min_length=2, max_length=50)
+
+class UserCreate(UserBase):
     """用户注册请求"""
-    email: EmailStr = Field(..., description="用户邮箱")
-    username: str = Field(..., min_length=2, max_length=50, description="用户名")
+    password: str = Field(..., min_length=8, max_length=100)
+    
+    @validator('password')
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError('密码长度必须至少8位')
+        return v
 
-class UserRegisterResponse(BaseModel):
-    """用户注册响应"""
-    message: str = Field(..., description="响应消息")
-    email: str = Field(..., description="用户邮箱")
-    expires_in_minutes: int = Field(..., description="验证码有效期（分钟）")
-
-class UserVerifyRequest(BaseModel):
-    """邮箱验证请求"""
-    email: EmailStr = Field(..., description="用户邮箱")
-    verification_code: str = Field(..., min_length=6, max_length=6, description="6位验证码")
-
-class UserVerifyResponse(BaseModel):
-    """邮箱验证响应"""
-    message: str = Field(..., description="响应消息")
-    email: str = Field(..., description="用户邮箱")
-    is_verified: bool = Field(..., description="是否验证成功")
-
-class UserLoginRequest(BaseModel):
+class UserLogin(BaseModel):
     """用户登录请求"""
-    email: EmailStr = Field(..., description="用户邮箱")
-    password: str = Field(..., min_length=6, description="用户密码")
+    email: EmailStr
+    password: str
+    remember_me: bool = False
 
-class UserLoginResponse(BaseModel):
-    """用户登录响应"""
-    access_token: str = Field(..., description="访问令牌")
-    token_type: str = Field(..., description="令牌类型")
-    expires_in_minutes: int = Field(..., description="令牌有效期（分钟）")
-    user: "UserProfileResponse" = Field(..., description="用户信息")
-
-class UserProfileResponse(BaseModel):
+class UserResponse(UserBase):
     """用户信息响应"""
-    id: int = Field(..., description="用户ID")
-    email: str = Field(..., description="用户邮箱")
-    username: str = Field(..., description="用户名")
-    is_verified: bool = Field(..., description="是否已验证")
-    is_active: bool = Field(..., description="是否激活")
-    created_at: datetime = Field(..., description="创建时间")
+    id: int
+    is_active: bool
+    created_at: datetime
+    last_login: Optional[datetime] = None
     
     class Config:
         from_attributes = True
+
+class TokenResponse(BaseModel):
+    """令牌响应"""
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int  # 过期时间（秒）
+
+class RefreshTokenRequest(BaseModel):
+    """刷新令牌请求"""
+    refresh_token: str
+
+class PasswordResetRequest(BaseModel):
+    """密码重置请求"""
+    email: EmailStr
+
+class PasswordResetConfirm(BaseModel):
+    """密码重置确认"""
+    token: str
+    new_password: str = Field(..., min_length=8, max_length=100)
+
+class LoginAttemptResponse(BaseModel):
+    """登录尝试响应"""
+    success: bool
+    message: str
+    remaining_attempts: Optional[int] = None
+    locked_until: Optional[datetime] = None
+    user: Optional[UserResponse] = None
+    tokens: Optional[TokenResponse] = None

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum, Integer
 from sqlalchemy.orm import relationship
 from app.database.models.base import BaseModel
 from datetime import datetime, timedelta
@@ -11,6 +11,8 @@ class WeatherCache(BaseModel):
     
     city_name = Column(String(100), nullable=False, index=True)
     province = Column(String(100), nullable=True)
+    # 新增：城市外键，匹配 City.weather_caches 关联
+    city_id = Column(Integer, ForeignKey("cities.id"), nullable=True, index=True)
     weather_type = Column(Enum('now', '24h', '7d', name='weather_type_enum'), nullable=False)
     weather_data = Column(Text, nullable=False)  # JSON格式存储
     expires_at = Column(DateTime, nullable=False, index=True)

@@ -8,6 +8,8 @@ class UserFavorite(BaseModel):
     __tablename__ = "user_favorites"
     
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # 新增：关联城市主键，解决 City.favorites 无外键的问题
+    city_id = Column(Integer, ForeignKey("cities.id"), nullable=True, index=True)
     city_name = Column(String(100), nullable=False, index=True)
     province = Column(String(100), nullable=True)
     

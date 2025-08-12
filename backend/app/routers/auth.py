@@ -1,301 +1,197 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from passlib.context import CryptContext
-from datetime import datetime, timedelta
-from typing import Optional
-from jose import jwt, JWTError
-
 from app.database.connection import get_db
-from app.database.models.user import User
-from app.database.models.email_verification import EmailVerification
-from app.services.email_service import email_service
-from app.core.config import settings
+from app.services.auth_service import AuthService
 from app.schemas.auth import (
-    UserRegisterRequest,
-    UserRegisterResponse,
-    UserVerifyRequest,
-    UserVerifyResponse,
-    UserLoginRequest,
-    UserLoginResponse,
-    UserProfileResponse
+    UserCreate, UserLogin, UserResponse, TokenResponse, 
+    RefreshTokenRequest, LoginAttemptResponse
 )
+from app.core.security import verify_token
+from typing import Optional
+import logging
 
-# 创建路由
-router = APIRouter(prefix="/auth", tags=["用户认证"])
+logger = logging.getLogger(__name__)
 
-# 密码加密上下文
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+router = APIRouter(prefix="/auth", tags=["认证"])
+security = HTTPBearer()
 
-# OAuth2 密码Bearer
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
-# 工具函数
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """验证密码"""
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password: str) -> str:
-    """获取密码哈希"""
-    return pwd_context.hash(password)
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """创建访问令牌"""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
-    return encoded_jwt
-
-async def get_current_user(token: str = Depends(oauth2_scheme), 
-                          db: AsyncSession = Depends(get_db)) -> User:
-    """获取当前用户"""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    
-    # 查询用户
-    result = await db.execute(select(User).where(User.id == int(user_id)))
-    user = result.scalar_one_or_none()
-    
-    if user is None:
-        raise credentials_exception
-    if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    
-    return user
-
-# 路由端点
-@router.post("/register/email", response_model=UserRegisterResponse)
-async def send_verification_email(
-    request: UserRegisterRequest,
+# 依赖函数：获取当前用户
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db)
-):
-    """发送注册验证码"""
+) -> Optional[UserResponse]:
+    """获取当前认证用户"""
     try:
-        # 检查邮箱是否已存在
-        result = await db.execute(select(User).where(User.email == request.email))
-        existing_user = result.scalar_one_or_none()
+        token = credentials.credentials
+        payload = verify_token(token)
         
-        if existing_user:
-            if existing_user.is_verified:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="邮箱已被注册"
-                )
-            else:
-                # 如果用户存在但未验证，刷新验证码
-                existing_user.refresh_verification_code()
-                await db.commit()
-                user = existing_user
-        else:
-            # 创建新用户（临时，未验证）
-            user = User(
-                email=request.email,
-                username=request.username,
-                password_hash="",  # 临时密码哈希
-                verification_code=User.generate_verification_code()
-            )
-            db.add(user)
-            await db.commit()
-            await db.refresh(user)
-        
-        # 发送验证码邮件
-        email_sent = await email_service.send_verification_email(
-            to_email=request.email,
-            verification_code=user.verification_code,
-            username=request.username
-        )
-        
-        if not email_sent:
+        if not payload or payload.get("type") != "access":
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="验证码发送失败，请稍后重试"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="无效的访问令牌"
             )
         
-        return UserRegisterResponse(
-            message="验证码已发送到您的邮箱",
-            email=request.email,
-            expires_in_minutes=10
-        )
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="令牌格式错误"
+            )
+        
+        auth_service = AuthService(db)
+        user = await auth_service.get_user_profile(int(user_id))
+        
+        if not user or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户不存在或已被禁用"
+            )
+        
+        return UserResponse.from_orm(user)
         
     except HTTPException:
         raise
     except Exception as e:
-        await db.rollback()
+        logger.error(f"获取当前用户失败: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"注册失败: {str(e)}"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="认证失败"
         )
 
-@router.post("/register/verify", response_model=UserVerifyResponse)
-async def verify_email_code(
-    request: UserVerifyRequest,
+@router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def register_user(
+    user_data: UserCreate,
     db: AsyncSession = Depends(get_db)
 ):
-    """验证邮箱验证码"""
+    """用户注册"""
     try:
-        # 查找用户
-        result = await db.execute(select(User).where(User.email == request.email))
-        user = result.scalar_one_or_none()
+        auth_service = AuthService(db)
+        success, message, user = await auth_service.register_user(user_data)
         
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="用户不存在"
-            )
-        
-        # 验证验证码
-        if user.verify_code(request.verification_code):
-            await db.commit()
-            return UserVerifyResponse(
-                message="邮箱验证成功",
-                email=request.email,
-                is_verified=True
-            )
-        else:
+        if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="验证码错误或已过期"
-            )
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"验证失败: {str(e)}"
-        )
-
-@router.post("/register/complete", response_model=UserProfileResponse)
-async def complete_registration(
-    email: str,
-    password: str,
-    db: AsyncSession = Depends(get_db)
-):
-    """完成注册（设置密码）"""
-    try:
-        # 查找已验证的用户
-        result = await db.execute(
-            select(User).where(User.email == email, User.is_verified == True)
-        )
-        user = result.scalar_one_or_none()
-        
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="用户不存在或未验证"
+                detail=message
             )
         
-        # 设置密码
-        user.password_hash = get_password_hash(password)
-        await db.commit()
-        await db.refresh(user)
-        
-        return UserProfileResponse(
-            id=user.id,
-            email=user.email,
-            username=user.username,
-            is_verified=user.is_verified,
-            is_active=user.is_active,
-            created_at=user.created_at
-        )
+        return {
+            "success": True,
+            "message": message,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "username": user.username
+            }
+        }
         
     except HTTPException:
         raise
     except Exception as e:
-        await db.rollback()
+        logger.error(f"用户注册失败: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"注册完成失败: {str(e)}"
+            detail="注册失败，请稍后重试"
         )
 
-@router.post("/login", response_model=UserLoginResponse)
-async def user_login(
-    request: UserLoginRequest,
+@router.post("/login", response_model=LoginAttemptResponse)
+async def login_user(
+    user_data: UserLogin,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """用户登录"""
     try:
-        # 查找用户
-        result = await db.execute(select(User).where(User.email == request.email))
-        user = result.scalar_one_or_none()
+        # 获取客户端信息
+        ip_address = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
         
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="邮箱或密码错误"
-            )
-        
-        if not user.is_verified:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="请先验证邮箱"
-            )
-        
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="账户已被禁用"
-            )
-        
-        # 验证密码
-        if not verify_password(request.password, user.password_hash):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="邮箱或密码错误"
-            )
-        
-        # 创建访问令牌
-        access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
-        access_token = create_access_token(
-            data={"sub": str(user.id)}, expires_delta=access_token_expires
+        auth_service = AuthService(db)
+        success, message, user, tokens = await auth_service.authenticate_user(
+            user_data, ip_address, user_agent
         )
         
-        return UserLoginResponse(
-            access_token=access_token,
-            token_type="bearer",
-            expires_in_minutes=settings.access_token_expire_minutes,
-            user=UserProfileResponse(
-                id=user.id,
-                email=user.email,
-                username=user.username,
-                is_verified=user.is_verified,
-                is_active=user.is_active,
-                created_at=user.created_at
+        if success:
+            return LoginAttemptResponse(
+                success=True,
+                message=message,
+                user=UserResponse.from_orm(user),
+                tokens=tokens
             )
+        else:
+            # 获取剩余尝试次数
+            recent_attempts = await auth_service._get_recent_login_attempts(user_data.email)
+            _, _, remaining = auth_service._check_login_attempts(user_data.email, recent_attempts)
+            
+            return LoginAttemptResponse(
+                success=False,
+                message=message,
+                remaining_attempts=remaining - 1
+            )
+            
+    except Exception as e:
+        logger.error(f"用户登录失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="登录失败，请稍后重试"
         )
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_access_token(
+    refresh_data: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """刷新访问令牌"""
+    try:
+        auth_service = AuthService(db)
+        success, message, tokens = await auth_service.refresh_tokens(refresh_data.refresh_token)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+        
+        return tokens
         
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"令牌刷新失败: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"登录失败: {str(e)}"
+            detail="令牌刷新失败"
         )
 
-@router.get("/profile", response_model=UserProfileResponse)
-async def get_user_profile(current_user: User = Depends(get_current_user)):
-    """获取用户信息"""
-    return UserProfileResponse(
-        id=current_user.id,
-        email=current_user.email,
-        username=current_user.username,
-        is_verified=current_user.is_verified,
-        is_active=current_user.is_active,
-        created_at=current_user.created_at
-    )
+@router.get("/profile", response_model=UserResponse)
+async def get_user_profile(
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """获取当前用户资料"""
+    return current_user
+
+@router.post("/logout", response_model=dict)
+async def logout_user(
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """用户登出"""
+    # 注意：JWT是无状态的，真正的登出需要在客户端删除令牌
+    # 这里可以记录登出日志或实现令牌黑名单
+    return {
+        "success": True,
+        "message": "登出成功"
+    }
+
+@router.get("/guest", response_model=dict)
+async def guest_mode():
+    """访客模式信息"""
+    return {
+        "success": True,
+        "message": "访客模式已启用",
+        "features": {
+            "weather_search": True,
+            "weather_display": True,
+            "favorites": False,
+            "user_profile": False
+        }
+    }

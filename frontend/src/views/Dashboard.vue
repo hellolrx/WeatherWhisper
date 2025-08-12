@@ -10,6 +10,7 @@ import FavoriteCities from '../components/favorites/FavoriteCities.vue'
 import CurrentWeather from '../components/weather/CurrentWeather.vue'
 import HourlyForecast from '../components/weather/HourlyForecast.vue'
 import DailyForecast from '../components/weather/DailyForecast.vue'
+import UserInfo from '../components/auth/UserInfo.vue'
 
 // 类型导入
 import type { CityOption, CurrentWeather as CurrentWeatherType, HourlyWeather, DailyWeather, FavoriteCity } from '../types/weather'
@@ -108,11 +109,16 @@ onMounted(async () => {
     <div class="container">
       <!-- 标题区域 -->
       <header class="header">
-        <h1 class="title">
-          <span class="icon">🌤️</span>
-          天语 · Weather Whisper
-        </h1>
-        <p class="subtitle">简洁纯净的天气查询</p>
+        <div class="header-left">
+          <h1 class="title">
+            <span class="icon">🌤️</span>
+            天语 · Weather Whisper
+          </h1>
+          <p class="subtitle">简洁纯净的天气查询</p>
+        </div>
+        <div class="header-right">
+          <UserInfo />
+        </div>
       </header>
 
       <!-- 主布局 -->

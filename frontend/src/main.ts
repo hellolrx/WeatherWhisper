@@ -6,6 +6,14 @@ import './styles/global.css'
 import App from './App.vue'
 
 const app = createApp(App)
-app.use(createPinia())
+const pinia = createPinia()
+
+app.use(pinia)
 app.use(router)
+
+// 初始化认证状态
+import { useAuthStore } from './stores/auth'
+const authStore = useAuthStore()
+authStore.initAuth()
+
 app.mount('#app')
