@@ -61,3 +61,19 @@ class LoginAttemptResponse(BaseModel):
     locked_until: Optional[datetime] = None
     user: Optional[UserResponse] = None
     tokens: Optional[TokenResponse] = None
+
+class SendVerificationRequest(BaseModel):
+    """发送验证码请求"""
+    email: EmailStr
+    verification_type: str = Field(..., pattern="^(register|reset_password)$")
+
+class VerifyCodeRequest(BaseModel):
+    """验证验证码请求"""
+    email: EmailStr
+    verification_code: str = Field(..., min_length=6, max_length=6, pattern="^[0-9]{6}$")
+    verification_type: str = Field(..., pattern="^(register|reset_password)$")
+
+class RegisterWithVerificationRequest(BaseModel):
+    """带验证码的用户注册请求"""
+    user_data: UserCreate
+    verification_code: str = Field(..., min_length=6, max_length=6, pattern="^[0-9]{6}$")

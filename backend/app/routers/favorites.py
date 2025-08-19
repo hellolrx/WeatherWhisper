@@ -45,19 +45,18 @@ async def add_favorite_city(
     """添加收藏城市"""
     try:
         favorite = await city_service.add_user_favorite(
-            db, current_user_id, request.city_name, request.province, request.country
+            db, current_user_id, request.city_name, request.province
         )
         
-        # 确保城市信息存在
+        # 确保城市信息存在（国家固定为中国，不再从入参传递）
         await city_service.get_or_create_city(
-            db, request.city_name, request.province, request.country
+            db, request.city_name, request.province
         )
         
         return FavoriteCityResponse(
             id=favorite.id,
             city_name=favorite.city_name,
             province=favorite.province,
-            country=favorite.country,
             created_at=favorite.created_at
         )
     except ValueError as e:
@@ -91,7 +90,6 @@ async def get_favorite_cities(
             id=fav.id,
             city_name=fav.city_name,
             province=fav.province,
-            country=fav.country,
             created_at=fav.created_at
         )
         for fav in favorites

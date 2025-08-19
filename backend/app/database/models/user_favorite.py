@@ -3,24 +3,20 @@ from sqlalchemy.orm import relationship
 from app.database.models.base import BaseModel
 
 class UserFavorite(BaseModel):
-    """用户收藏城市模型"""
-    
-    __tablename__ = "user_favorites"
-    
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    # 新增：关联城市主键，解决 City.favorites 无外键的问题
-    city_id = Column(Integer, ForeignKey("cities.id"), nullable=True, index=True)
-    city_name = Column(String(100), nullable=False, index=True)
-    province = Column(String(100), nullable=True)
-    
-    # 关联关系
-    user = relationship("User", back_populates="favorites")
-    city = relationship("City", back_populates="favorites")
-    
-    def to_dict(self):
-        """转换为字典"""
-        data = super().to_dict()
-        # 添加城市信息
-        if self.city:
-            data['city_info'] = self.city.to_dict()
-        return data
+	"""用户收藏城市模型"""
+	
+	__tablename__ = "user_favorites"
+	
+	user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+	city_name = Column(String(100), nullable=False, index=True)
+	province = Column(String(100), nullable=True)
+	
+	# 关联关系
+	user = relationship("User", back_populates="favorites")
+	city = relationship("City", back_populates="favorites", viewonly=True, primaryjoin="foreign(UserFavorite.city_name)==City.city_name")
+	
+	def to_dict(self):
+		"""转换为字典"""
+		data = super().to_dict()
+		# 添加城市信息（非严格外键，仅按名称映射）
+		return data

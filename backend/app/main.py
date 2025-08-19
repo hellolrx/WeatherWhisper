@@ -12,18 +12,30 @@ def _get_allowed_origins() -> list[str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动时初始化数据库
-    from app.database.connection import init_db
+    from app.database.connection import init_db, close_db, AsyncSessionLocal
+    from app.services.scheduler import EmailScheduleWorker
+
     try:
         await init_db()
         print("✅ 数据库初始化成功")
     except Exception as e:
         print(f"❌ 数据库初始化失败: {e}")
     
-    yield
-    
-    # 关闭时清理数据库连接
-    from app.database.connection import close_db
-    await close_db()
+    # 启动定时任务调度器（每60秒扫描一次）
+    worker = EmailScheduleWorker(AsyncSessionLocal, interval_seconds=60, batch_size=20)
+    worker.start()
+    print("🕒 定时任务调度器已启动")
+
+    try:
+        yield
+    finally:
+        # 关闭调度器与数据库连接
+        try:
+            await worker.stop()
+            print("🛑 定时任务调度器已停止")
+        except Exception:
+            pass
+        await close_db()
 
 
 app = FastAPI(
@@ -45,6 +57,7 @@ from app.routers.geo import router as geo_router  # noqa: E402
 from app.routers.weather import router as weather_router  # noqa: E402
 from app.routers.auth import router as auth_router  # noqa: E402
 from app.routers.favorites import router as favorites_router  # noqa: E402
+from app.routers.notifications import router as notifications_router  # noqa: E402
 from app.services import qweather  # noqa: E402
 
 
@@ -52,6 +65,7 @@ app.include_router(geo_router, prefix="/api")
 app.include_router(weather_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(favorites_router, prefix="/api")
+app.include_router(notifications_router, prefix="/api")
 
 
 @app.get("/api/health")

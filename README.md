@@ -508,29 +508,83 @@ git status
 
 本文档记录了项目启动过程中遇到的主要问题和解决方案，供后续开发者参考。
 
-## 🎉 登录功能开发完成记录 2025.8.12
+## 🎉 登录功能开发完成记录 2025.8.14
 
 ### 功能概述
-✅ **用户注册**: 邮箱+用户名+密码（8位以上）
+✅ **用户注册**: 邮箱+用户名+密码（8位以上）+ 邮箱验证码验证  
 ✅ **用户登录**: 邮箱+密码+记住我功能  
 ✅ **访客模式**: 无需注册，直接进入天气主页
 ✅ **JWT认证**: 访问令牌7天，刷新令牌30天
 ✅ **安全特性**: 密码哈希存储，邮箱验证
+✅ **邮箱验证**: QQ邮箱SMTP服务，6位数字验证码，10分钟有效期 ✅ **已完成并测试通过**
 
 ### 技术实现
-- **后端**: FastAPI + SQLAlchemy + JWT + bcrypt
+- **后端**: FastAPI + SQLAlchemy + JWT + bcrypt + QQ邮箱SMTP
 - **前端**: Vue3 + TypeScript + Pinia + Vue Router
 - **数据库**: MySQL + 外键约束 + 级联删除
 - **认证**: JWT令牌 + 本地存储 + 路由守卫
+- **邮件服务**: QQ邮箱SMTP + 验证码生成 + 邮件模板
+
+### 邮箱验证流程 ✅ **已实现**
+1. **发送验证码**: 用户输入邮箱后点击"发送验证码" ✅
+2. **验证码生成**: 系统生成6位数字验证码，有效期10分钟 ✅
+3. **邮件发送**: 通过QQ邮箱SMTP服务发送验证码到用户邮箱 ✅
+4. **验证码验证**: 用户输入验证码，系统验证后完成注册 ✅
+5. **防重复发送**: 60秒倒计时，防止频繁发送验证码 ✅
+
+### 邮箱配置说明 ✅ **已配置完成**
+项目使用QQ邮箱SMTP服务发送验证码邮件，配置已完成：
+
+```bash
+# 在 backend/.env 文件中已配置
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=587
+SMTP_USER=your_email@qq.com
+SMTP_PASSWORD=your_smtp_password  # QQ邮箱授权码，非登录密码
+SMTP_USE_TLS=true
+```
+
+**获取QQ邮箱授权码步骤：**
+1. 登录QQ邮箱网页版
+2. 进入"设置" → "账户"
+3. 开启"POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV服务"
+4. 生成授权码（16位字符）
+5. 将授权码填入 `SMTP_PASSWORD` 字段
 
 ### 数据库架构
 - `users`: 用户基本信息、密码哈希、验证状态
 - `user_favorites`: 用户收藏城市（外键关联）
 - `weather_cache`: 天气数据缓存（外键关联）
-- `email_verifications`: 邮箱验证码管理
+- `email_verifications`: 邮箱验证码管理（新增）✅
 - `password_reset_tokens`: 密码重置令牌
 - `login_attempts`: 登录尝试记录
 - `cities`: 城市信息管理
+
+### 新增API接口 ✅ **已实现并测试**
+- `POST /api/auth/send-verification` - 发送邮箱验证码 ✅
+- `POST /api/auth/verify-code` - 验证邮箱验证码 ✅
+- `POST /api/auth/register` - 用户注册（需要验证码）✅
+
+### 前端功能增强 ✅ **已实现**
+- **验证码发送按钮**: 带60秒倒计时，防止重复发送 ✅
+- **验证码输入框**: 6位数字验证，实时格式验证 ✅
+- **成功提示**: 验证码发送成功后的友好提示 ✅
+- **表单验证**: 完整的表单验证逻辑，包括验证码验证 ✅
+- **响应式设计**: 移动端友好的验证码发送按钮布局 ✅
+
+### 🎯 **功能测试状态**
+- ✅ 邮箱验证码发送功能正常
+- ✅ 用户注册流程完整
+- ✅ 前端验证码界面正常
+- ✅ 后端API接口正常
+- ✅ 数据库表结构完整
+- ✅ SMTP配置正确
+
+### 🚀 **下一步计划**
+- [ ] 密码重置功能（使用邮箱验证）
+- [ ] 用户资料管理
+- [ ] 邮箱验证码重发优化
+- [ ] 邮件模板美化
 
 ### 问题1：pip依赖冲突
 
@@ -780,7 +834,7 @@ pip list | findstr package_name         # 查看包版本
 # 服务启动
 python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload  # 启动后端
 cd frontend
-npm run dev -- --port 3000              # 启动前端（端口3000）
+npm run dev               # 启动前端（端口3000）
 
 # 数据库管理
 python backend/init_auth_tables.py      # 初始化认证表
@@ -794,3 +848,84 @@ mysql -u weatheruser -p                 # 连接数据库
 # 缓存清理
 Remove-Item -Path "__pycache__" -Recurse -Force  # 清理Python缓存
 ```
+
+## ✉️ 邮件推送天气（2025-08-19）
+
+> 本节说明新加入的“邮件推送天气（立即/定时）”功能、技术实现、使用说明、数据库变更与常见问题。
+
+### 功能概览
+- **立即发送**
+  - 在“当前天气”与“已关注的城市”处新增“发送到邮箱”按钮
+  - 弹窗支持选择城市、邮箱（默认登录邮箱，可改）、实时预览“今日天气摘要”后发送
+  - 发送成功/失败，弹窗右上角 toast 提示（成功 1.2 秒后自动关闭）
+- **定时发送**
+  - 频率：一次 / 每天
+  - 默认值：切换到“定时”时，频率默认“一次”，时间=当前时刻，日期=今天（Asia/Shanghai）
+  - 创建成功后由后台调度器自动在到点执行
+
+### 技术实现
+- **后端**
+  - FastAPI + SQLAlchemy Async（MySQL / asyncmy）
+  - 邮件发送：`emails` 库（QQ SMTP）
+  - 天气数据：和风天气 API（实时 + 7 天）；预览文案由服务层组合（“今日实时 + 今日高低温”）
+  - 轻量调度器：`EmailScheduleWorker`（后台异步循环，每 60 秒扫描一次）
+    - 到期任务执行发送；ONCE 成功后置 `SENT`；DAILY 成功后 `next_run_at += 1 day`
+    - 失败任务回退 5 分钟后重试，避免热循环
+  - 通知路由：优先支持 `city_name + province` 入参；服务内自动解析和风 `location id`
+- **前端**
+  - 弹窗 `SendWeatherEmailModal`：城市下拉、邮箱、发送方式（立即/定时）、频率/时间/日期、预览区、loading 与 toast
+  - API 封装 `useNotificationApi`：`previewWeatherEmail / sendWeatherEmail / scheduleWeatherEmail`
+  - 收藏点击后通过“省份+城市名”解析出和风城市 ID 再查询天气，避免 ID 缺失
+
+### 数据库存储
+- `email_notifications`：发送日志
+  - 关键字段：`user_id, email, city_id, subject, content, status(SENT/FAILED), error_message, created_at`
+- `email_schedules`：定时任务
+  - 关键字段：`user_id, email, city_id, city_name, province, type(ONCE|DAILY), time_hhmm, date, timezone, next_run_at(UTC), status(ACTIVE/CANCELLED/SENT), last_run_at, created_at`
+  - 如需手工迁移（已在代码中使用）：
+    ```sql
+    ALTER TABLE email_schedules ADD COLUMN IF NOT EXISTS city_name VARCHAR(100) NULL;
+    ALTER TABLE email_schedules ADD COLUMN IF NOT EXISTS province  VARCHAR(100) NULL;
+    ```
+
+### 使用说明
+- **立即发送**
+  1. 点击“发送到邮箱”打开弹窗，确认城市与邮箱
+  2. 预览区展示“今日天气摘要”，点击“发送”
+  3. 弹窗右上角显示结果；成功 1.2 秒后自动关闭
+  4. 可在 `email_notifications` 表查看历史记录
+- **创建定时**
+  1. 切换“定时”，设置“频率/时间/日期”（默认已填好）
+  2. 点击“创建定时”，成功后由后台每 60 秒扫描，到点自动发送
+  3. ONCE 执行成功后任务标记为 `SENT`；DAILY 执行成功后 `next_run_at += 1 天`
+
+### 调度器与资源占用
+- 轮询周期：默认 60 秒（可调）
+- 每次处理：最多 20 条（可调）
+- 失败回退：5 分钟后再试
+- 说明：扫描查询为轻量 SQL，批量小、发送串行，开销可控；如需更高性能可按需开启并发发送或缩短轮询间隔
+
+### 配置项（后端）
+- 调度器（`app/main.py`）
+  - `EmailScheduleWorker(AsyncSessionLocal, interval_seconds=60, batch_size=20)`
+- 发送限流（`notification_service.py`）
+  - `MIN_INTERVAL_SECONDS`：最小间隔秒数（针对 user+email）
+  - `DAILY_QUOTA`：每日配额
+  - `RATE_LIMIT_ENABLED`：限流总开关（开发/联调可关闭）
+
+### 常见问题 & 解决方案
+- 启动时报 ORM 关系错误（删除 `city_id` 后）
+  - 方案：`City.favorites` 改为名称+省份的 `primaryjoin`（`viewonly=True`），不再依赖外键
+- 立即发送 422/500
+  - 原因：前端传 `city_id` 或后端未解析 ID
+  - 方案：统一使用 `city_name + province`，后端 `search_city(query)` 解析和风 `location id`
+- 频繁限制误判（429）
+  - 方案：只统计 `SENT` 记录；判定维度为 `(user_id, email)`；支持总开关 `RATE_LIMIT_ENABLED`
+- 定时报 500：`Unknown column 'city_name' in 'field list'`
+  - 方案：补齐 `email_schedules.city_name/province` 两列（见上文 SQL）
+- 收藏点击后天气页面空白/Invalid Date
+  - 方案：点击收藏时用“省份+城市名”重新搜索获取带 `id` 的城市对象，再拉取天气
+
+---
+
+> 如需把调度频率/发送并发进一步参数化或增加“任务列表/取消任务”接口，可在 `routers/notifications.py` 与 `services/scheduler.py` 基础上扩展。

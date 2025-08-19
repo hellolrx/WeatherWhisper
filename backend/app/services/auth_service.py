@@ -12,6 +12,8 @@ from app.core.security import (
     create_refresh_token, create_password_reset_token, check_login_attempts
 )
 from app.core.config import settings
+from app.services.email_service import email_service
+import random
 import logging
 
 logger = logging.getLogger(__name__)
@@ -22,14 +24,114 @@ class AuthService:
     def __init__(self, db: AsyncSession):
         self.db = db
     
-    async def register_user(self, user_data: UserCreate) -> Tuple[bool, str, Optional[User]]:
+    async def send_verification_code(self, email: str, verification_type: str = "register") -> Tuple[bool, str]:
         """
-        用户注册
+        发送验证码到指定邮箱
         
+        Args:
+            email: 邮箱地址
+            verification_type: 验证类型 (register, reset_password)
+            
+        Returns:
+            Tuple[bool, str]: (是否成功, 消息)
+        """
+        try:
+            # 检查邮箱是否已注册（注册时）
+            if verification_type == "register":
+                existing_user = await self._get_user_by_email(email)
+                if existing_user:
+                    return False, "该邮箱已被注册"
+            
+            # 生成6位数字验证码
+            verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+            
+            # 检查是否已有未过期的验证码
+            existing_verification = await self._get_valid_verification(email, verification_type)
+            if existing_verification:
+                # 更新现有验证码
+                existing_verification.verification_code = verification_code
+                existing_verification.expires_at = datetime.utcnow() + timedelta(minutes=10)
+                existing_verification.is_used = False
+            else:
+                # 创建新的验证记录
+                new_verification = EmailVerification.create_verification(
+                    email=email,
+                    verification_code=verification_code,
+                    verification_type=verification_type,
+                    ttl_minutes=10
+                )
+                self.db.add(new_verification)
+            
+            await self.db.commit()
+            
+            # 发送验证码邮件
+            if verification_type == "register":
+                success = await email_service.send_verification_email(email, verification_code)
+            else:
+                success = await email_service.send_password_reset_email(email, verification_code)
+            
+            if success:
+                logger.info(f"验证码发送成功: {email}")
+                return True, "验证码已发送到您的邮箱，请注意查收"
+            else:
+                return False, "验证码发送失败，请稍后重试"
+                
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"发送验证码失败: {e}")
+            return False, "发送验证码失败，请稍后重试"
+    
+    async def verify_email_code(self, email: str, verification_code: str, verification_type: str = "register") -> Tuple[bool, str]:
+        """
+        验证邮箱验证码
+        
+        Args:
+            email: 邮箱地址
+            verification_code: 验证码
+            verification_type: 验证类型
+            
+        Returns:
+            Tuple[bool, str]: (是否成功, 消息)
+        """
+        try:
+            # 查找验证记录
+            verification = await self._get_valid_verification(email, verification_type)
+            if not verification:
+                return False, "验证码不存在或已过期"
+            
+            # 检查验证码是否匹配
+            if verification.verification_code != verification_code:
+                return False, "验证码错误"
+            
+            # 标记验证码为已使用
+            verification.mark_as_used()
+            await self.db.commit()
+            
+            logger.info(f"邮箱验证成功: {email}")
+            return True, "邮箱验证成功"
+            
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"验证邮箱验证码失败: {e}")
+            return False, "验证失败，请稍后重试"
+    
+    async def register_user(self, user_data: UserCreate, verification_code: str) -> Tuple[bool, str, Optional[User]]:
+        """
+        用户注册（需要邮箱验证）
+        
+        Args:
+            user_data: 用户注册数据
+            verification_code: 邮箱验证码
+            
         Returns:
             Tuple[bool, str, Optional[User]]: (是否成功, 消息, 用户对象)
         """
         try:
+            # 验证邮箱验证码
+            is_valid, message = await self.verify_email_code(user_data.email, verification_code, "register")
+            if not is_valid:
+                return False, message, None
+            
             # 检查邮箱是否已存在
             existing_user = await self._get_user_by_email(user_data.email)
             if existing_user:
@@ -46,8 +148,11 @@ class AuthService:
                 email=user_data.email,
                 username=user_data.username,
                 password_hash=hashed_password,
+                verification_code="",  # 注册成功后清空验证码字段
                 is_active=True,
-                is_verified=True  # 简化版本，默认已验证
+                is_verified=True,  # 邮箱已验证
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
             )
             
             self.db.add(new_user)
@@ -61,7 +166,7 @@ class AuthService:
             await self.db.rollback()
             logger.error(f"用户注册失败: {e}")
             return False, "注册失败，请稍后重试", None
-    
+
     async def authenticate_user(self, user_data: UserLogin, ip_address: str = None, user_agent: str = None) -> Tuple[bool, str, Optional[User], Optional[TokenResponse]]:
         """
         用户认证
@@ -101,9 +206,6 @@ class AuthService:
     async def refresh_tokens(self, refresh_token: str) -> Tuple[bool, str, Optional[TokenResponse]]:
         """
         刷新访问令牌
-        
-        Returns:
-            Tuple[bool, str, Optional[TokenResponse]]: (是否成功, 消息, 新令牌)
         """
         try:
             # 验证刷新令牌
@@ -155,8 +257,19 @@ class AuthService:
         )
         return result.scalar_one_or_none()
     
-    # 简化版本，移除登录尝试记录功能
-    pass
+    async def _get_valid_verification(self, email: str, verification_type: str) -> Optional[EmailVerification]:
+        """获取有效的验证记录"""
+        result = await self.db.execute(
+            select(EmailVerification).where(
+                and_(
+                    EmailVerification.email == email,
+                    EmailVerification.verification_type == verification_type,
+                    EmailVerification.is_used == False,
+                    EmailVerification.expires_at > datetime.utcnow()
+                )
+            )
+        )
+        return result.scalar_one_or_none()
     
     async def _create_user_tokens(self, user: User, remember_me: bool = False) -> TokenResponse:
         """创建用户令牌"""

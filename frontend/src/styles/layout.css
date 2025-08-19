@@ -99,7 +99,7 @@
 @media (min-width: 768px) {
     .weather-app {
         /* 桌面端：两列布局 - 侧边栏400px，主内容充分利用剩余空间 */
-        grid-template-columns: 400px 1fr;
+        grid-template-columns: 460px 1fr;
         grid-template-rows: 1fr;
         gap: clamp(1.5rem, 2vw, 2.5rem);
         max-width: 2000px;

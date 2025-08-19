@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, Integer, Numeric, DateTime
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, foreign
 from app.database.models.base import BaseModel
 from datetime import datetime
 
@@ -16,8 +16,13 @@ class City(BaseModel):
     search_count = Column(Integer, default=1, nullable=False)
     last_searched_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
-    # 关联关系
-    favorites = relationship("UserFavorite", back_populates="city", cascade="all, delete-orphan")
+    # 关联关系（按名称+省份映射，非外键）
+    favorites = relationship(
+        "UserFavorite",
+        primaryjoin="and_(foreign(UserFavorite.city_name)==City.city_name, foreign(UserFavorite.province)==City.province)",
+        back_populates="city",
+        viewonly=True
+    )
     weather_caches = relationship("WeatherCache", back_populates="city", cascade="all, delete-orphan")
     
     def increment_search_count(self):

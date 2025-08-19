@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from pathlib import Path
 
 import httpx
@@ -69,24 +69,28 @@ async def _get_json(url: str, params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def search_city(query: str) -> Dict[str, Any]:
+    """城市搜索API - 和风天气原生支持层级搜索"""
     _, geo = _get_hosts()
     url = f"{geo}/v2/city/lookup"
     return await _get_json(url, {"location": query})
 
 
 async def weather_now(location: str) -> Dict[str, Any]:
+    """获取实时天气"""
     base, _ = _get_hosts()
     url = f"{base}/v7/weather/now"
     return await _get_json(url, {"location": location})
 
 
 async def weather_24h(location: str) -> Dict[str, Any]:
+    """获取24小时天气预报"""
     base, _ = _get_hosts()
     url = f"{base}/v7/weather/24h"
     return await _get_json(url, {"location": location})
 
 
 async def weather_7d(location: str) -> Dict[str, Any]:
+    """获取7天天气预报"""
     base, _ = _get_hosts()
     url = f"{base}/v7/weather/7d"
     return await _get_json(url, {"location": location})

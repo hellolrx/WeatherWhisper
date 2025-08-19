@@ -26,6 +26,9 @@ AsyncSessionLocal = async_sessionmaker(
 # 创建基础模型类
 Base = declarative_base()
 
+# 导入所有模型以确保表被创建
+from app.database.models import *  # noqa: F403, F401
+
 async def get_db() -> AsyncSession:
     """获取数据库会话的依赖函数"""
     async with AsyncSessionLocal() as session:

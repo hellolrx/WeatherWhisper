@@ -12,22 +12,20 @@ from datetime import datetime
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app.database.connection import engine
+from app.database.connection import engine, init_db
 from app.database.models.user import User
+from app.database.models.email_verification import EmailVerification
 from app.core.security import get_password_hash
 from sqlalchemy import text
 
 async def create_auth_tables():
-    """使用现有数据库表结构"""
+    """创建认证系统数据库表"""
     try:
-        print("🔧 正在检查现有数据库表结构...")
+        print("🔧 正在创建认证系统数据库表...")
         
-        # 只检查连接，不重新创建表
-        async with engine.begin() as conn:
-            result = await conn.execute(text("SELECT 1"))
-            print("✅ 数据库连接正常")
-        
-        print("✅ 使用现有数据库表结构")
+        # 初始化数据库，创建所有表
+        await init_db()
+        print("✅ 数据库表创建成功")
         
         # 创建测试用户（可选）
         await create_test_user()

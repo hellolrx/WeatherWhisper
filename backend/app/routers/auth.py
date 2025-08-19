@@ -5,7 +5,8 @@ from app.database.connection import get_db
 from app.services.auth_service import AuthService
 from app.schemas.auth import (
     UserCreate, UserLogin, UserResponse, TokenResponse, 
-    RefreshTokenRequest, LoginAttemptResponse
+    RefreshTokenRequest, LoginAttemptResponse, SendVerificationRequest,
+    VerifyCodeRequest, RegisterWithVerificationRequest
 )
 from app.core.security import verify_token
 from typing import Optional
@@ -59,15 +60,85 @@ async def get_current_user(
             detail="认证失败"
         )
 
-@router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def register_user(
-    user_data: UserCreate,
+@router.post("/send-verification", response_model=dict, status_code=status.HTTP_200_OK)
+async def send_verification_code(
+    request: SendVerificationRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """用户注册"""
+    """发送邮箱验证码"""
     try:
         auth_service = AuthService(db)
-        success, message, user = await auth_service.register_user(user_data)
+        success, message = await auth_service.send_verification_code(
+            request.email, 
+            request.verification_type
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+        
+        return {
+            "success": True,
+            "message": message
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"发送验证码失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="发送验证码失败，请稍后重试"
+        )
+
+@router.post("/verify-code", response_model=dict, status_code=status.HTTP_200_OK)
+async def verify_email_code(
+    request: VerifyCodeRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """验证邮箱验证码"""
+    try:
+        auth_service = AuthService(db)
+        success, message = await auth_service.verify_email_code(
+            request.email,
+            request.verification_code,
+            request.verification_type
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+        
+        return {
+            "success": True,
+            "message": message
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"验证验证码失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="验证失败，请稍后重试"
+        )
+
+@router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def register_user(
+    user_data: RegisterWithVerificationRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """用户注册（需要邮箱验证）"""
+    try:
+        auth_service = AuthService(db)
+        success, message, user = await auth_service.register_user(
+            user_data.user_data, 
+            user_data.verification_code
+        )
         
         if not success:
             raise HTTPException(
@@ -119,14 +190,11 @@ async def login_user(
                 tokens=tokens
             )
         else:
-            # 获取剩余尝试次数
-            recent_attempts = await auth_service._get_recent_login_attempts(user_data.email)
-            _, _, remaining = auth_service._check_login_attempts(user_data.email, recent_attempts)
-            
+            # 简化版本，不记录登录尝试次数
             return LoginAttemptResponse(
                 success=False,
                 message=message,
-                remaining_attempts=remaining - 1
+                remaining_attempts=None
             )
             
     except Exception as e:

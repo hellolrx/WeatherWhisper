@@ -10,19 +10,52 @@
       {{ error }}
     </div>
 
+    <!-- 成功提示 -->
+    <div v-if="successMessage" class="success-message">
+      {{ successMessage }}
+    </div>
+
     <form @submit.prevent="handleSubmit" class="form">
       <!-- 邮箱输入 -->
       <div class="form-group">
         <label for="email">邮箱地址</label>
-        <input
-          id="email"
-          v-model="formData.email"
-          type="email"
-          placeholder="请输入邮箱地址"
-          :class="{ 'error': formErrors.email }"
-          @blur="validateField('email')"
-        />
+        <div class="email-input-group">
+          <input
+            id="email"
+            v-model="formData.email"
+            type="email"
+            placeholder="请输入邮箱地址"
+            :class="{ 'error': formErrors.email }"
+            @blur="validateField('email')"
+            :disabled="isLoading"
+          />
+          <button
+            type="button"
+            class="send-code-btn"
+            @click="sendVerificationCode"
+            :disabled="isLoading || !formData.email || countdown > 0"
+          >
+            <span v-if="countdown > 0">{{ countdown }}s</span>
+            <span v-else>发送验证码</span>
+          </button>
+        </div>
         <span v-if="formErrors.email" class="error-text">{{ formErrors.email }}</span>
+      </div>
+
+      <!-- 验证码输入 -->
+      <div class="form-group">
+        <label for="verificationCode">验证码</label>
+        <input
+          id="verificationCode"
+          v-model="formData.verificationCode"
+          type="text"
+          placeholder="请输入6位验证码"
+          maxlength="6"
+          :class="{ 'error': formErrors.verificationCode }"
+          @blur="validateField('verificationCode')"
+          :disabled="isLoading"
+        />
+        <span v-if="formErrors.verificationCode" class="error-text">{{ formErrors.verificationCode }}</span>
       </div>
 
       <!-- 用户名输入 -->
@@ -35,6 +68,7 @@
           placeholder="请输入用户名"
           :class="{ 'error': formErrors.username }"
           @blur="validateField('username')"
+          :disabled="isLoading"
         />
         <span v-if="formErrors.username" class="error-text">{{ formErrors.username }}</span>
       </div>
@@ -49,6 +83,7 @@
           placeholder="请输入密码（至少8位）"
           :class="{ 'error': formErrors.password }"
           @blur="validateField('password')"
+          :disabled="isLoading"
         />
         <span v-if="formErrors.password" class="error-text">{{ formErrors.password }}</span>
       </div>
@@ -63,6 +98,7 @@
           placeholder="请再次输入密码"
           :class="{ 'error': formErrors.confirmPassword }"
           @blur="validateField('confirmPassword')"
+          :disabled="isLoading"
         />
         <span v-if="formErrors.confirmPassword" class="error-text">{{ formErrors.confirmPassword }}</span>
       </div>
@@ -98,7 +134,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 import { useAuth } from '../../composables/useAuth'
 import type { UserCreate } from '../../types/auth'
 
@@ -118,13 +154,85 @@ const formData = reactive({
   email: '',
   username: '',
   password: '',
-  confirmPassword: ''
+  confirmPassword: '',
+  verificationCode: ''
 })
+
+// 状态管理
+const successMessage = ref('')
+const countdown = ref(0)
+
+// 发送验证码
+async function sendVerificationCode() {
+  if (!formData.email) {
+    formErrors.email = '请先输入邮箱地址'
+    return
+  }
+  
+  // 验证邮箱格式
+  const emailError = registerValidationRules.email(formData.email)
+  if (emailError) {
+    formErrors.email = emailError
+    return
+  }
+  
+  try {
+    clearErrors()
+    isLoading.value = true
+    
+    const response = await fetch('http://127.0.0.1:8000/api/auth/send-verification', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: formData.email,
+        verification_type: 'register'
+      }),
+    })
+
+    const data = await response.json()
+
+    if (response.ok && data.success) {
+      successMessage.value = data.message
+      startCountdown()
+      // 3秒后清除成功消息
+      setTimeout(() => {
+        successMessage.value = ''
+      }, 3000)
+    } else {
+      setError(data.message || '发送验证码失败')
+    }
+
+  } catch (err) {
+    console.error('发送验证码失败:', err)
+    setError('网络错误，请检查网络连接')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 开始倒计时
+function startCountdown() {
+  countdown.value = 60
+  const timer = setInterval(() => {
+    countdown.value--
+    if (countdown.value <= 0) {
+      clearInterval(timer)
+    }
+  }, 1000)
+}
+
+// 设置错误
+function setError(message: string) {
+  error.value = message
+}
 
 // 表单提交处理
 async function handleSubmit() {
   // 清除之前的错误
   clearErrors()
+  successMessage.value = ''
   
   // 验证表单
   if (!validateForm()) {
@@ -138,8 +246,8 @@ async function handleSubmit() {
     password: formData.password
   }
   
-  // 提交注册
-  const success = await register(userData)
+  // 提交注册（带验证码）
+  const success = await register(userData, formData.verificationCode)
   if (success) {
     // 注册成功，跳转由useAuth处理
     console.log('注册成功')
@@ -154,6 +262,15 @@ function validateForm(): boolean {
   const emailError = registerValidationRules.email(formData.email)
   if (emailError) {
     formErrors.email = emailError
+    isValid = false
+  }
+  
+  // 验证验证码
+  if (!formData.verificationCode) {
+    formErrors.verificationCode = '请输入验证码'
+    isValid = false
+  } else if (!/^[0-9]{6}$/.test(formData.verificationCode)) {
+    formErrors.verificationCode = '验证码格式错误'
     isValid = false
   }
   
@@ -195,6 +312,14 @@ function validateField(field: string) {
   } else if (field === 'confirmPassword') {
     const error = registerValidationRules.confirmPassword(formData.confirmPassword, formData)
     formErrors.confirmPassword = error || ''
+  } else if (field === 'verificationCode') {
+    if (!formData.verificationCode) {
+      formErrors.verificationCode = '请输入验证码'
+    } else if (!/^[0-9]{6}$/.test(formData.verificationCode)) {
+      formErrors.verificationCode = '验证码格式错误'
+    } else {
+      formErrors.verificationCode = ''
+    }
   }
 }
 </script>
@@ -238,6 +363,16 @@ function validateField(field: string) {
   font-size: 0.9rem;
 }
 
+.success-message {
+  background: #f0fff4;
+  color: #2f855a;
+  padding: 0.75rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  border: 1px solid #c6f6d5;
+  font-size: 0.9rem;
+}
+
 .form {
   display: flex;
   flex-direction: column;
@@ -254,6 +389,37 @@ function validateField(field: string) {
   font-weight: 500;
   margin-bottom: 0.5rem;
   font-size: 0.9rem;
+}
+
+.email-input-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.email-input-group input {
+  flex: 1;
+}
+
+.send-code-btn {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  min-width: 100px;
+}
+
+.send-code-btn:hover:not(:disabled) {
+  background: #2980b9;
+}
+
+.send-code-btn:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
 }
 
 .form-group input {
@@ -273,6 +439,11 @@ function validateField(field: string) {
 
 .form-group input.error {
   border-color: #e74c3c;
+}
+
+.form-group input:disabled {
+  background: #f8f9fa;
+  cursor: not-allowed;
 }
 
 .error-text {
@@ -375,6 +546,14 @@ function validateField(field: string) {
   
   .form-header h2 {
     font-size: 1.5rem;
+  }
+  
+  .email-input-group {
+    flex-direction: column;
+  }
+  
+  .send-code-btn {
+    min-width: auto;
   }
 }
 </style> 

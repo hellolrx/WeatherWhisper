@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useFavoritesStore } from '../stores/favorites'
 import { useWeatherApi } from '../composables/useWeatherApi'
 import { useGeolocation } from '../composables/useGeolocation'
+import { useAuthStore } from '../stores/auth'
 
 // 组件导入
 import SearchBox from '../components/search/SearchBox.vue'
@@ -11,12 +12,14 @@ import CurrentWeather from '../components/weather/CurrentWeather.vue'
 import HourlyForecast from '../components/weather/HourlyForecast.vue'
 import DailyForecast from '../components/weather/DailyForecast.vue'
 import UserInfo from '../components/auth/UserInfo.vue'
+import SendWeatherEmailModal from '../components/modals/SendWeatherEmailModal.vue'
 
 // 类型导入
 import type { CityOption, CurrentWeather as CurrentWeatherType, HourlyWeather, DailyWeather, FavoriteCity } from '../types/weather'
 
 // 状态管理
 const favorites = useFavoritesStore()
+const authStore = useAuthStore()
 const { loading, errorMsg, searchCities, getWeatherData } = useWeatherApi()
 const { getCurrentPosition } = useGeolocation()
 
@@ -27,6 +30,16 @@ const currentWeather = ref<CurrentWeatherType | null>(null)
 const hourlyData = ref<HourlyWeather[]>([])
 const dailyData = ref<DailyWeather[]>([])
 const showOptions = ref(false)
+const searchDropdownOpen = ref(false)
+
+// 邮件弹窗
+const sendModalVisible = ref(false)
+const sendDefaultCityId = ref<string>('')
+
+function openSendModal(cityId: string) {
+  sendDefaultCityId.value = cityId
+  sendModalVisible.value = true
+}
 
 // 搜索相关方法
 async function handleSearch(query: string) {
@@ -34,13 +47,10 @@ async function handleSearch(query: string) {
   options.value = cities
   
   if (cities.length === 1) {
-    // 只有一个结果，直接加载
     await handleSelectCity(cities[0])
     showOptions.value = false
   } else if (cities.length > 1) {
-    // 多个结果，显示选项
     showOptions.value = true
-    // 如果有省会或主要城市，自动选择
     const mainCity = cities.find((c: CityOption) => c.adm2 === c.name) || cities[0]
     await handleSelectCity(mainCity)
   } else {
@@ -76,27 +86,25 @@ function handleCloseOptions() {
   showOptions.value = false
 }
 
+function handleToggleSuggestions(open: boolean) {
+  searchDropdownOpen.value = open
+}
+
 // 收藏相关方法
-function handleAddFavorite(city: CityOption) {
-  favorites.add({
-    id: city.id,
-    name: city.name,
-    adm1: city.adm1,
-    adm2: city.adm2
-  })
-}
-
-function handleRemoveFavorite(id: string) {
-  favorites.remove(id)
-}
-
 async function handleLoadWeather(city: FavoriteCity) {
-  await handleSelectCity(city as CityOption)
+  // 收藏里不再保存和风城市ID，这里用 名称+省份 重新解析一次
+  const query = `${city.adm1 || ''} ${city.name}`.trim() || city.name
+  const results = await searchCities(query)
+  const matched = results.find((c: CityOption) => c.name === city.name && (!city.adm1 || c.adm1 === city.adm1)) || results[0]
+  if (matched) {
+    await handleSelectCity(matched)
+  } else {
+    console.warn('未找到匹配城市：', city)
+  }
 }
 
 // 初始化
 onMounted(async () => {
-  // 尝试获取地理位置
   const locationQuery = await getCurrentPosition()
   if (locationQuery) {
     await handleSearch(locationQuery)
@@ -135,18 +143,17 @@ onMounted(async () => {
             @select-city="handleSelectCity"
             @input="handleInput"
             @close-options="handleCloseOptions"
+            @toggle-suggestions="handleToggleSuggestions"
           />
 
           <!-- 收藏城市组件 -->
           <FavoriteCities
-            :favorites="favorites.list"
             :limit="favorites.limit"
             :selected-city="selectedCity"
-            :show-options="showOptions"
-            :options-length="options.length"
+            :show-options="searchDropdownOpen"
+            :options-length="searchDropdownOpen ? 2 : options.length"
             @load-weather="handleLoadWeather"
-            @remove-favorite="handleRemoveFavorite"
-            @add-favorite="handleAddFavorite"
+            @open-send-email="openSendModal"
           />
         </aside>
 
@@ -157,6 +164,7 @@ onMounted(async () => {
             <CurrentWeather
               :weather="currentWeather"
               :selected-city="selectedCity"
+              @open-send-email="openSendModal"
             />
 
             <!-- 预报容器 -->
@@ -177,6 +185,16 @@ onMounted(async () => {
         <p>正在获取天气信息...</p>
       </div>
     </div>
+
+    <!-- 发送邮件弹窗 -->
+    <SendWeatherEmailModal
+      :visible="sendModalVisible"
+      :favorites="favorites.list"
+      :default-city-id="sendDefaultCityId"
+      :default-email="authStore.user?.email"
+      @close="sendModalVisible=false"
+      @sent="() => {}"
+    />
   </div>
 </template>
 

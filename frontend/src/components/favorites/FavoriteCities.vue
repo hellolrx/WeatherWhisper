@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, defineEmits, defineProps } from 'vue'
+import { computed, defineEmits, defineProps, onMounted, watch } from 'vue'
+import { useFavoritesStore } from '../../stores/favorites'
 import type { FavoriteCity, CityOption } from '../../types/weather'
 
 // Props
 interface Props {
-  favorites: FavoriteCity[]
   limit: number
   selectedCity?: CityOption | null
   showOptions?: boolean
@@ -12,7 +12,6 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  favorites: () => [],
   limit: 10,
   selectedCity: null,
   showOptions: false,
@@ -22,14 +21,32 @@ const props = withDefaults(defineProps<Props>(), {
 // Events
 const emit = defineEmits<{
   loadWeather: [city: FavoriteCity]
-  removeFavorite: [id: string]
-  addFavorite: [city: CityOption]
+  'open-send-email': [cityId: string]
 }>()
 
+// Store
+const favoritesStore = useFavoritesStore()
+
+// 监听认证状态变化
+watch(() => favoritesStore.isAuthenticated, (isAuth) => {
+  if (isAuth) {
+    favoritesStore.loadFavorites()
+  } else {
+    favoritesStore.list = []
+  }
+})
+
+// 组件挂载时初始化
+onMounted(() => {
+  favoritesStore.init()
+})
+
 // Computed
+const favorites = computed(() => favoritesStore.list)
+
 const favoritesByProvince = computed(() => {
   const grouped: Record<string, FavoriteCity[]> = {}
-  props.favorites.forEach(city => {
+  favorites.value.forEach(city => {
     const province = city.adm1 || '其他'
     if (!grouped[province]) {
       grouped[province] = []
@@ -41,29 +58,62 @@ const favoritesByProvince = computed(() => {
 
 const canAddFavorite = computed(() => {
   return props.selectedCity && 
-         !props.favorites.find(c => c.id === props.selectedCity?.id) &&
-         props.favorites.length < props.limit
+         favoritesStore.canAddFavorite(props.selectedCity.id) &&
+         !favoritesStore.loading
 })
 
 // Methods
-function handleAddFavorite() {
+async function handleAddFavorite() {
   if (props.selectedCity && canAddFavorite.value) {
-    emit('addFavorite', props.selectedCity)
+    const success = await favoritesStore.add({
+      id: props.selectedCity.id,
+      name: props.selectedCity.name,
+      adm1: props.selectedCity.adm1,
+      adm2: props.selectedCity.adm2
+    })
+    
+    if (success) {
+      console.log('收藏添加成功')
+    }
   }
+}
+
+async function handleRemoveFavorite(id: string) {
+  const success = await favoritesStore.remove(id)
+  if (success) {
+    console.log('收藏移除成功')
+  }
+}
+
+function handleLoadWeather(city: FavoriteCity) {
+  emit('loadWeather', city)
+}
+
+function handleOpenSend() {
+  const defaultId = props.selectedCity?.id || (favorites.value[0]?.id || '')
+  if (defaultId) emit('open-send-email', defaultId)
 }
 </script>
 
 <template>
   <div class="favorites-wrapper">
+    <!-- 错误提示 -->
+    <div v-if="favoritesStore.error" class="error-message">
+      {{ favoritesStore.error }}
+      <button @click="favoritesStore.clearError" class="error-close">×</button>
+    </div>
+
     <!-- 收藏按钮 -->
     <button 
       v-if="selectedCity" 
       @click="handleAddFavorite" 
       :disabled="!canAddFavorite"
       class="favorite-btn"
-      :class="{ 'disabled': !canAddFavorite }"
+      :class="{ 'disabled': !canAddFavorite, 'loading': favoritesStore.loading }"
     >
-      {{ canAddFavorite ? '⭐ 收藏' : '✅ 已收藏' }}
+      <span v-if="favoritesStore.loading">🔄</span>
+      <span v-else-if="canAddFavorite">⭐ 收藏</span>
+      <span v-else>✅ 已收藏</span>
     </button>
 
     <!-- 收藏城市列表 -->
@@ -75,7 +125,10 @@ function handleAddFavorite() {
       >
         <div class="favorites-header">
           <h3 class="section-title">📌 已关注的城市</h3>
-          <span class="favorites-count">{{ favorites.length }}/{{ limit }}</span>
+          <div class="header-actions">
+            <span class="favorites-count">{{ favorites.length }}/{{ limit }}</span>
+            <button class="send-btn" @click="handleOpenSend">✉️ 发送邮件</button>
+          </div>
         </div>
         
         <!-- 按省份分组显示 -->
@@ -94,15 +147,15 @@ function handleAddFavorite() {
                 v-for="city in cities" 
                 :key="city.id" 
                 class="favorite-card"
-                @click="emit('loadWeather', city)"
+                @click="handleLoadWeather(city)"
               >
                 <span class="city-name">{{ city.name }}</span>
                 <button 
-                  @click.stop="emit('removeFavorite', city.id)"
+                  @click.stop="handleRemoveFavorite(city.id)"
                   class="remove-btn"
-                  title="移除关注"
+                  :disabled="favoritesStore.loading"
                 >
-                  ❌
+                  🗑️
                 </button>
               </div>
             </div>
@@ -110,6 +163,17 @@ function handleAddFavorite() {
         </div>
       </div>
     </Transition>
+
+    <!-- 空状态和加载状态 -->
+    <div v-if="!favoritesStore.loading && favorites.length === 0" class="empty-state">
+      <p class="empty-text">暂无收藏城市</p>
+      <p class="empty-hint">搜索并收藏你喜欢的城市吧！</p>
+    </div>
+
+    <!-- 加载状态 -->
+    <div v-if="favoritesStore.loading" class="loading-state">
+      <p class="loading-text">🔄 加载中...</p>
+    </div>
   </div>
 </template>
 
@@ -143,6 +207,12 @@ function handleAddFavorite() {
   cursor: not-allowed;
 }
 
+.favorite-btn.loading {
+  background: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* 收藏区域卡片样式 */
 .favorites-section {
   margin: 0 auto;
@@ -157,7 +227,7 @@ function handleAddFavorite() {
   border: 1px solid rgba(255,255,255,0.8);
   transition: all 0.3s ease;
   overflow: visible;
-  width: 90%;
+  width: 100%;
   max-width: 100%;
   box-sizing: border-box;
 }
@@ -226,7 +296,7 @@ function handleAddFavorite() {
 
 .province-cities {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); /* 稍加宽，尽量单行 */
   gap: 1rem;
 }
 
@@ -236,13 +306,17 @@ function handleAddFavorite() {
   align-items: center;
   justify-content: space-between;
   margin: 0.5rem 0;
-  padding: 1rem 1.25rem;
+  padding: 0.9rem 1rem; /* 稍微紧凑，增大可显示宽度 */
   background: rgba(248,249,250,0.8);
   backdrop-filter: blur(10px);
   border-radius: 0.75rem;
   cursor: pointer;
   transition: all 0.3s ease;
   border: 1px solid rgba(255,255,255,0.6);
+  width: 100%;
+  white-space: nowrap;      /* 单行显示 */
+  overflow: hidden;         /* 超出隐藏 */
+  text-overflow: ellipsis;  /* 省略号 */
 }
 
 .favorite-card:hover {
@@ -254,11 +328,14 @@ function handleAddFavorite() {
 
 .city-name {
   margin: 0;
-  padding: 0.25rem 0.5rem;
+  padding: 0.15rem 0.25rem; /* 更紧凑 */
   font-weight: 500;
   color: #2d3436;
-  font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+  font-size: clamp(0.95rem, 2.2vw, 1.05rem); /* 字号略降，避免换行 */
   transition: color 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .favorite-card:hover .city-name {
@@ -285,6 +362,11 @@ function handleAddFavorite() {
   opacity: 1;
 }
 
+.remove-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* 收藏框被推下时的样式 */
 .favorites-section.pushed-down {
   margin-top: 280px;
@@ -303,10 +385,65 @@ function handleAddFavorite() {
   transform: translateY(-20px);
 }
 
+/* 错误提示样式 */
+.error-message {
+  background-color: #f44336;
+  color: white;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.error-message .error-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+}
+
+/* 空状态样式 */
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: #636e72;
+  font-size: 1.1rem;
+}
+
+.empty-text {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.empty-hint {
+  font-size: 0.9rem;
+}
+
+/* 加载状态样式 */
+.loading-state {
+  text-align: center;
+  padding: 2rem;
+  color: #636e72;
+  font-size: 1.1rem;
+}
+
+.loading-text {
+  font-weight: 600;
+}
+
 /* 移动端响应式调整 */
 @media (min-width: 768px) {
   .favorites-section {
     width: 95%;
   }
 }
+
+.header-actions { display:flex; align-items:center; gap: 8px; }
+.send-btn { background: #0984e3; color: #fff; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
 </style>

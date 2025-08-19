@@ -65,7 +65,7 @@ class CityService:
         return result.scalars().all()
     
     async def add_user_favorite(self, db: AsyncSession, user_id: int, city_name: str, 
-                               province: str, country: str = "中国") -> UserFavorite:
+                               province: str) -> UserFavorite:
         """添加用户收藏"""
         # 检查是否已经收藏
         existing = await db.execute(
@@ -82,8 +82,7 @@ class CityService:
         favorite = UserFavorite(
             user_id=user_id,
             city_name=city_name,
-            province=province,
-            country=country
+            province=province
         )
         db.add(favorite)
         await db.commit()

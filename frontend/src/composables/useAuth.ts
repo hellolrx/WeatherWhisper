@@ -33,7 +33,7 @@ export function useAuth() {
   }
 
   // 用户注册
-  async function register(userData: UserCreate): Promise<boolean> {
+  async function register(userData: UserCreate, verificationCode: string): Promise<boolean> {
     try {
       clearErrors()
       isLoading.value = true
@@ -43,7 +43,10 @@ export function useAuth() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(userData),
+        body: JSON.stringify({
+          user_data: userData,
+          verification_code: verificationCode
+        }),
       })
 
       const data: RegisterResponse = await response.json()

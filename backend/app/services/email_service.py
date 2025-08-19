@@ -16,6 +16,30 @@ class EmailService:
         self.smtp_password = settings.smtp_password
         self.smtp_use_tls = settings.smtp_use_tls
         
+    async def send_plain_email(self, to_email: str, subject: str, content: str) -> bool:
+        """发送纯文本邮件（简单通用）"""
+        try:
+            message = emails.Message(
+                subject=subject,
+                text=content,
+                mail_from=(settings.app_name, self.smtp_user)
+            )
+            response = message.send(
+                to=to_email,
+                smtp={
+                    "host": self.smtp_host,
+                    "port": self.smtp_port,
+                    "user": self.smtp_user,
+                    "password": self.smtp_password,
+                    "tls": self.smtp_use_tls,
+                    "timeout": 10
+                }
+            )
+            return response.status_code == 250
+        except Exception as e:
+            logger.error(f"Error sending plain email to {to_email}: {e}")
+            return False
+    
     async def send_verification_email(self, to_email: str, verification_code: str, 
                                     username: Optional[str] = None) -> bool:
         """发送验证码邮件"""
@@ -67,7 +91,7 @@ class EmailService:
                     </div>
                     <div class="footer">
                         <p>此邮件由系统自动发送，请勿回复</p>
-                        <p>&copy; 2024 WeatherWhisper. All rights reserved.</p>
+                        <p>&copy; 2025 WeatherWhisper. All rights reserved.</p>
                     </div>
                 </div>
             </body>
@@ -153,7 +177,7 @@ class EmailService:
                     </div>
                     <div class="footer">
                         <p>此邮件由系统自动发送，请勿回复</p>
-                        <p>&copy; 2024 WeatherWhisper. All rights reserved.</p>
+                        <p>&copy; 2025 WeatherWhisper. All rights reserved.</p>
                     </div>
                 </div>
             </body>
