@@ -58,6 +58,7 @@ from app.routers.weather import router as weather_router  # noqa: E402
 from app.routers.auth import router as auth_router  # noqa: E402
 from app.routers.favorites import router as favorites_router  # noqa: E402
 from app.routers.notifications import router as notifications_router  # noqa: E402
+from app.routers.rag import router as rag_router  # noqa: E402
 from app.services import qweather  # noqa: E402
 
 
@@ -66,6 +67,7 @@ app.include_router(weather_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(favorites_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
+app.include_router(rag_router, prefix="/api")
 
 
 @app.get("/api/health")

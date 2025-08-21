@@ -4,8 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.database.models import EmailNotification, EmailSchedule, UserFavorite
-from app.services.qweather import weather_now, weather_7d
+from app.services.qweather import weather_now, weather_3d
 from app.services.email_service import email_service
+from app.services.rag_service import (
+	build_query_from_weather,
+	retrieve_rag_context,
+	generate_advice,
+)
+import asyncio
 
 
 DAILY_QUOTA = 50
@@ -58,13 +64,41 @@ class NotificationService:
 		return (
 			f"现在是 {obs}，{city_name} {text}。当前 {temp}°C，体感 {feels}°C，{wind_dir}{wind_scale}级，湿度 {hum}%"
 			+ (f"；今日最高 {max_t}°C、最低 {min_t}°C" if max_t and min_t else "")
-			+ "。\n（出门建议：后续接入 LLM 生成）"
 		)
 	
 	async def preview(self, city_id: str, city_name: str) -> str:
-		now = await weather_now(city_id)
-		d7 = await weather_7d(city_id)
-		return self._compose_text(city_name, now, d7)
+		# 并发请求，单个失败不让整体失败
+		now_res, d3_res = await asyncio.gather(
+			weather_now(city_id),
+			weather_3d(city_id),
+			return_exceptions=True,
+		)
+		now = {} if isinstance(now_res, Exception) else now_res
+		d3 = {} if isinstance(d3_res, Exception) else d3_res
+		base_text = self._compose_text(city_name, now, d3 if d3 else None)
+		# 组织天气信息，生成 RAG + LLM 建议
+		try:
+			now_data = now.get("now", {}) if isinstance(now, dict) else {}
+			first_day = (d3.get("daily", [{}])[0]) if isinstance(d3, dict) and d3 else {}
+			weather_info = {
+				"city_name": city_name,
+				"obs_time": (now_data.get("obsTime", "").replace("T", " ").replace("+08:00", "")),
+				"condition": now_data.get("text"),
+				"temp": now_data.get("temp"),
+				"feels_like": now_data.get("feelsLike"),
+				"wind_dir": now_data.get("windDir"),
+				"wind_scale": now_data.get("windScale"),
+				"humidity": now_data.get("humidity"),
+				"temp_max": first_day.get("tempMax"),
+				"temp_min": first_day.get("tempMin"),
+			}
+			query = build_query_from_weather(weather_info)
+			rag_ctx = retrieve_rag_context(query, top_k=4)
+			advice = generate_advice(weather_info, rag_ctx)
+			return base_text + "\n\n穿衣建议：\n" + advice
+		except Exception:
+			# RAG/LLM 故障时仅返回基础天气文本
+			return base_text
 	
 	async def send_now(self, db: AsyncSession, user_id: int, email: str, city_id: str, city_name: str) -> Tuple[bool, str, int]:
 		# 配额与频率检查（可关闭）

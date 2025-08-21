@@ -89,9 +89,8 @@ function handleLoadWeather(city: FavoriteCity) {
   emit('loadWeather', city)
 }
 
-function handleOpenSend() {
-  const defaultId = props.selectedCity?.id || (favorites.value[0]?.id || '')
-  if (defaultId) emit('open-send-email', defaultId)
+function handleOpenSend(cityId: string) {
+  emit('open-send-email', cityId)
 }
 </script>
 
@@ -127,7 +126,6 @@ function handleOpenSend() {
           <h3 class="section-title">📌 已关注的城市</h3>
           <div class="header-actions">
             <span class="favorites-count">{{ favorites.length }}/{{ limit }}</span>
-            <button class="send-btn" @click="handleOpenSend">✉️ 发送邮件</button>
           </div>
         </div>
         
@@ -147,16 +145,25 @@ function handleOpenSend() {
                 v-for="city in cities" 
                 :key="city.id" 
                 class="favorite-card"
-                @click="handleLoadWeather(city)"
               >
-                <span class="city-name">{{ city.name }}</span>
-                <button 
-                  @click.stop="handleRemoveFavorite(city.id)"
-                  class="remove-btn"
-                  :disabled="favoritesStore.loading"
-                >
-                  🗑️
-                </button>
+                <span class="city-name" @click="handleLoadWeather(city)">{{ city.name }}</span>
+                <div class="card-actions">
+                  <button 
+                    @click="handleOpenSend(city.id)"
+                    class="send-btn-small"
+                    title="发送到邮箱"
+                  >
+                    ✉️
+                  </button>
+                  <button 
+                    @click.stop="handleRemoveFavorite(city.id)"
+                    class="remove-btn"
+                    :disabled="favoritesStore.loading"
+                    title="移除收藏"
+                  >
+                    🗑️
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -296,7 +303,7 @@ function handleOpenSend() {
 
 .province-cities {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); /* 稍加宽，尽量单行 */
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1rem;
 }
 
@@ -306,17 +313,13 @@ function handleOpenSend() {
   align-items: center;
   justify-content: space-between;
   margin: 0.5rem 0;
-  padding: 0.9rem 1rem; /* 稍微紧凑，增大可显示宽度 */
+  padding: 0.9rem 1rem;
   background: rgba(248,249,250,0.8);
   backdrop-filter: blur(10px);
   border-radius: 0.75rem;
-  cursor: pointer;
   transition: all 0.3s ease;
   border: 1px solid rgba(255,255,255,0.6);
   width: 100%;
-  white-space: nowrap;      /* 单行显示 */
-  overflow: hidden;         /* 超出隐藏 */
-  text-overflow: ellipsis;  /* 省略号 */
 }
 
 .favorite-card:hover {
@@ -328,11 +331,13 @@ function handleOpenSend() {
 
 .city-name {
   margin: 0;
-  padding: 0.15rem 0.25rem; /* 更紧凑 */
+  padding: 0.15rem 0.25rem;
   font-weight: 500;
   color: #2d3436;
-  font-size: clamp(0.95rem, 2.2vw, 1.05rem); /* 字号略降，避免换行 */
+  font-size: clamp(0.95rem, 2.2vw, 1.05rem);
   transition: color 0.2s ease;
+  cursor: pointer;
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -342,6 +347,30 @@ function handleOpenSend() {
   color: #0984e3;
 }
 
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.send-btn-small {
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+  background: #0984e3;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+}
+
+.send-btn-small:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
 .remove-btn {
   margin: 0;
   padding: 0.25rem;
@@ -349,13 +378,9 @@ function handleOpenSend() {
   border: none;
   cursor: pointer;
   font-size: 0.8rem;
-  opacity: 0;
+  opacity: 0.6;
   transition: opacity 0.3s ease;
   flex-shrink: 0;
-}
-
-.favorite-card:hover .remove-btn {
-  opacity: 0.7;
 }
 
 .remove-btn:hover {
@@ -364,7 +389,7 @@ function handleOpenSend() {
 
 .remove-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.3;
 }
 
 /* 收藏框被推下时的样式 */
@@ -444,6 +469,9 @@ function handleOpenSend() {
   }
 }
 
-.header-actions { display:flex; align-items:center; gap: 8px; }
-.send-btn { background: #0984e3; color: #fff; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+.header-actions { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+}
 </style>

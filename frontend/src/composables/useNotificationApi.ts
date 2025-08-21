@@ -34,7 +34,7 @@ export function useNotificationApi() {
   async function previewWeatherEmail(payload: SendWeatherPayload) {
     error.value = null
     const body = { ...payload, dry_run: true }
-    const res = await http.post('notifications/send-weather', body, { headers: authHeader() })
+    const res = await http.post('notifications/send-weather', body, { headers: authHeader(), timeout: 45000 })
     return res.data
   }
 
@@ -42,7 +42,7 @@ export function useNotificationApi() {
     error.value = null
     sending.value = true
     try {
-      const res = await http.post('notifications/send-weather', payload, { headers: authHeader() })
+      const res = await http.post('notifications/send-weather', payload, { headers: authHeader(), timeout: 45000 })
       return res.data
     } finally {
       sending.value = false
@@ -54,7 +54,7 @@ export function useNotificationApi() {
     sending.value = true
     try {
       const finalPayload = { time: '09:00', timezone: 'Asia/Shanghai', ...payload }
-      const res = await http.post('notifications/schedule-weather', finalPayload, { headers: authHeader() })
+      const res = await http.post('notifications/schedule-weather', finalPayload, { headers: authHeader(), timeout: 45000 })
       return res.data
     } finally {
       sending.value = false

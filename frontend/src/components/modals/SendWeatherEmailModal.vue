@@ -18,6 +18,31 @@ const email = ref(props.defaultEmail || '')
 const mode = ref<'NOW'|'SCHEDULE'>('NOW')
 const scheduleType = ref<'ONCE'|'DAILY'>('ONCE')
 
+// 监听 defaultCityId 变化，确保弹窗打开时选中正确的城市
+watch(() => props.defaultCityId, (newCityId) => {
+  if (newCityId) {
+    cityId.value = newCityId
+  }
+}, { immediate: true })
+
+// 监听弹窗显示状态，重置表单
+watch(() => props.visible, (visible) => {
+  if (visible) {
+    // 弹窗打开时，确保选中正确的城市
+    if (props.defaultCityId) {
+      cityId.value = props.defaultCityId
+    } else if (props.favorites.length > 0 && !cityId.value) {
+      cityId.value = props.favorites[0].id
+    }
+    
+    // 重置发送方式为立即发送
+    mode.value = 'NOW'
+    
+    // 触发预览
+    doPreview()
+  }
+})
+
 function getNowHHMM() {
   const d = new Date()
   const hh = String(d.getHours()).padStart(2, '0')
@@ -66,10 +91,6 @@ function currentCity() {
   const c = props.favorites.find(x => x.id === cityId.value) || props.favorites[0]
   return c
 }
-
-watch(() => props.visible, (v) => {
-  if (v) doPreview()
-})
 
 watch([cityId, mode, scheduleType, timeHHMM, dateYMD], () => {
   if (props.visible) doPreview()
